@@ -2,7 +2,7 @@ from pathlib import Path
 import asyncio
 import pickle
 from scrapers.wiki.utils import get_latest_dumpstatus_url, fetch_dumpstatus, is_dump_done, get_download_urls, pair_wiki_files, get_unique_indices, read_multistream
-from scrapers.wiki.scraper import run_scraper
+from scrapers.wiki.async_func import run_scraper
 import logging
 
 logging.basicConfig(
