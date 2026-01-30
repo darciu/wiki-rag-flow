@@ -73,3 +73,5 @@ async def run_scraper(download_urls):
         
         await asyncio.gather(*tasks)
 
+
+
