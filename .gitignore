@@ -10,4 +10,4 @@ __pycache__/
 .vscode/
 tmp/
 temp/
-data/
+downloaded_data/
