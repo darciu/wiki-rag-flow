@@ -1,4 +1,4 @@
-
+from tqdm import tqdm
 import xml.etree.ElementTree as ET
 import requests
 import re
@@ -142,11 +142,39 @@ def get_full_block(filepath, byte_offset):
                 
         return b"".join(parts).decode('utf-8')
     
+def get_title_id_from_page(page):
+    tmp = page.partition('<revision>')[0]
+    title_start = tmp.find('<title>') + 7
+    title_end = tmp.find('</title>')
+    title = tmp[title_start:title_end]
 
-def read_multistream(filepath, indices):
-    all_pages = []
-    for offset in indices:
+    id_start = tmp.find('<id>') + 4
+    id_end = tmp.find('</id>')
+    page_id = tmp[id_start:id_end]
+    return title, page_id
+
+
+def multistream_to_mongodb(mongodb_client, filepath, indices):
+    logger.info(f"Upserting records to MongoDB scraper_db/wikipedia from file: {filepath}")
+    batch = []
+    batch_size = 30
+    for offset in tqdm(indices):
         full_xml_block = get_full_block(filepath, offset)
-        all_pages.append(full_xml_block.split('<page>'))
+        pages = full_xml_block.split('<page>')
+        for page in pages:
+            if not page.isspace():
+                title, page_id = get_title_id_from_page(page)
+                if page_id:
+                    load = {
+                        "_id": page_id,
+                        "title": title,
+                        "content": page
+                    }
+                    batch.append(load)
+                if len(batch) >= batch_size:
+                    mongodb_client.bulk_upsert("wikipedia", batch)
+                    batch = []
 
-    return all_pages
+    if batch:
+        mongodb_client.bulk_upsert("wikipedia", batch)
+    logger.info(f"Finished upserting file: {filepath}")

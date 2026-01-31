@@ -14,11 +14,11 @@ HEADERS = {
     "User-Agent": "wiki-rag-flow (contact: giemzadariusz@gmail.com)"
 }
 
-async def download_file(url, wiki_md5, session, semaphore):
+async def download_file(url, wiki_md5, download_path, session, semaphore):
     filename = url.split('/')[-1]
     max_retries = 3
 
-    if Path('data/'+filename).exists():
+    if Path(download_path+filename).exists():
         logger.info(f'File {filename} already exists')
         return
     
@@ -43,16 +43,16 @@ async def download_file(url, wiki_md5, session, semaphore):
                         leave=False
                     )
 
-                    with open('data/'+filename, 'wb') as f:
+                    with open(download_path+filename, 'wb') as f:
                         async for chunk in response.content.iter_chunked(1024 * 64): # 64KB chunks
                             if chunk:
                                 f.write(chunk)
                                 progress_bar.update(len(chunk))
                     logger.info(f"Finished downloading: {filename}")
 
-                    if not check_md5('tmp/'+filename, wiki_md5):
+                    if not check_md5(download_path+filename, wiki_md5):
                         logger.error(f'MD5 of downloaded file {filename} is not correct')
-                        file = Path('tmp/'+filename)
+                        file = Path(download_path+filename)
                         file.unlink()
                         logger.info(f'File {filename} has been deleted')
                     else:
@@ -62,13 +62,13 @@ async def download_file(url, wiki_md5, session, semaphore):
                 
 
 
-async def run_scraper(download_urls):
+async def run_scraper(download_urls, download_path):
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
     
     async with aiohttp.ClientSession(headers=HEADERS) as session:
         tasks = []
         for item in download_urls:
-            task = asyncio.create_task(download_file(item['url'], item['md5'], session, semaphore))
+            task = asyncio.create_task(download_file(item['url'], item['md5'], download_path, session, semaphore))
             tasks.append(task)
         
         await asyncio.gather(*tasks)
