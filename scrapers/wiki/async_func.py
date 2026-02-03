@@ -1,9 +1,9 @@
 import asyncio
+import logging
 import aiohttp
 from pathlib import Path
 from tqdm import tqdm
-from datetime import datetime
-import logging
+from typing import List, Dict
 from scrapers.wiki.utils import check_md5
 
 logger = logging.getLogger(__name__)
@@ -14,11 +14,19 @@ HEADERS = {
     "User-Agent": "wiki-rag-flow (contact: giemzadariusz@gmail.com)"
 }
 
-async def download_file(url, wiki_md5, download_path, session, semaphore):
+async def download_file(
+    url: str, 
+    wiki_md5: str, 
+    download_path: str, 
+    session: aiohttp.ClientSession, 
+    semaphore: asyncio.Semaphore
+) -> None:
+    """Downloads a file from a URL with retry logic and MD5 verification."""
     filename = url.split('/')[-1]
+    file_full_path = Path(download_path) / filename
     max_retries = 3
 
-    if Path(download_path+filename).exists():
+    if Path(file_full_path).exists():
         logger.info(f'File {filename} already exists')
         return
     
@@ -43,16 +51,16 @@ async def download_file(url, wiki_md5, download_path, session, semaphore):
                         leave=False
                     )
 
-                    with open(download_path+filename, 'wb') as f:
+                    with open(file_full_path, 'wb') as f:
                         async for chunk in response.content.iter_chunked(1024 * 64): # 64KB chunks
                             if chunk:
                                 f.write(chunk)
                                 progress_bar.update(len(chunk))
                     logger.info(f"Finished downloading: {filename}")
 
-                    if not check_md5(download_path+filename, wiki_md5):
+                    if not check_md5(file_full_path, wiki_md5):
                         logger.error(f'MD5 of downloaded file {filename} is not correct')
-                        file = Path(download_path+filename)
+                        file = Path(file_full_path)
                         file.unlink()
                         logger.info(f'File {filename} has been deleted')
                     else:
@@ -62,7 +70,8 @@ async def download_file(url, wiki_md5, download_path, session, semaphore):
                 
 
 
-async def run_scraper(download_urls, download_path):
+async def run_scraper(download_urls: List[Dict[str, str]], download_path: str) -> None:
+    """Orchestrates the scraping process using a semaphore to limit concurrency."""
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
     
     async with aiohttp.ClientSession(headers=HEADERS) as session:
