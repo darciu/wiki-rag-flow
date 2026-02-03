@@ -1,3 +1,4 @@
+from typing import Optional, Any, Dict, List, Tuple, TYPE_CHECKING
 from tqdm import tqdm
 import xml.etree.ElementTree as ET
 import requests
@@ -7,10 +8,15 @@ import hashlib
 from pathlib import Path
 import bz2
 
+if TYPE_CHECKING:
+    from pymongo import MongoClient
+
 logger = logging.getLogger(__name__)
 
-def get_latest_dumpstatus_url():
-    rss_url = "https://dumps.wikimedia.org/plwiki/latest/plwiki-latest-pages-articles-multistream-index.txt.bz2-rss.xml"
+def get_latest_dumpstatus_url(rss_url)-> Optional[str]:
+    """
+    Retrieves the latest Wikimedia dump date from RSS and returns the dumpstatus.json URL.
+    """
     
     try:
         logger.info(f'Download wiki metadata from: {rss_url}')
@@ -35,7 +41,10 @@ def get_latest_dumpstatus_url():
         logger.exception(f'Exception has occured: {e}')
         raise
     
-def fetch_dumpstatus(dumpstatus_url):
+def fetch_dumpstatus(dumpstatus_url)-> Dict[str, Any]:
+    """
+    Downloads and parses the Wikimedia dumpstatus JSON metadata.
+    """
     try:
         logger.info(f'Download wiki dumpstatus from: {dumpstatus_url}')
         response = requests.get(dumpstatus_url, timeout=10)
@@ -53,14 +62,21 @@ def fetch_dumpstatus(dumpstatus_url):
         logger.exception(f'Exception has occured: {e}')
         raise
 
-def is_dump_done(articlesmultistreamdump):
+def is_dump_done(articlesmultistreamdump: Dict[str, Any]) -> bool:
+    """
+    Checks if the Wikipedia articles multistream dump status is 'done'.
+    """
     if articlesmultistreamdump.get('status','') == 'done':
         logger.info(f'Articles multistream dump is ready to download')
         return True
     else:
         logger.error(f'Articles multistream dump is not ready to download')
+        return False
 
-def get_download_urls(articlesmultistreamdump):
+def get_download_urls(articlesmultistreamdump: Dict[str, Any]) -> List[Dict[str, str]]:
+    """
+    Extracts download URLs and their MD5 checksums from the dump metadata.
+    """
     multistream_urls = []
     for _, val in articlesmultistreamdump['files'].items():
 
@@ -70,7 +86,10 @@ def get_download_urls(articlesmultistreamdump):
         })
     return multistream_urls
 
-def check_md5(filepath, wiki_md5):
+def check_md5(filepath: str, wiki_md5: str) -> bool:
+    """
+    Verifies the file integrity by comparing its MD5 hash with the provided checksum.
+    """
     with open(filepath, "rb") as f:
         digest = hashlib.file_digest(f, "md5")
         actual_md5 = digest.hexdigest()
@@ -78,7 +97,10 @@ def check_md5(filepath, wiki_md5):
     return actual_md5 == wiki_md5
 
 
-def pair_wiki_files(folder_path):
+def pair_wiki_files(folder_path: str) -> List[Dict[str, str]]:
+    """
+    Pairs Wikipedia multistream index files with their corresponding data files inside download folder.
+    """
 
     index = {}
     multistream = {}
@@ -107,7 +129,11 @@ def pair_wiki_files(folder_path):
     return pairs
 
 
-def get_unique_indices(filepath):
+def get_unique_indices(filepath: str) -> List[int]:
+    """
+    Extracts and sorts unique byte offsets from a Wikipedia multistream index file.
+    It is necessary for further reading bz2 files with articles.
+    """
     logging.info(f"Get unique indices for: {filepath}")
     offsets = set()
     with bz2.open(filepath, 'rt', encoding='utf-8') as source:
@@ -124,7 +150,10 @@ def get_unique_indices(filepath):
     return sorted(list(offsets))
 
 
-def get_full_block(filepath, byte_offset):
+def get_full_block(filepath: str, byte_offset: int) -> str:
+    """
+    Extracts and decompresses a single BZ2 block from a specific byte offset (index) in a file.
+    """
     with open(filepath, 'rb') as f:
         f.seek(byte_offset)
         
@@ -139,10 +168,17 @@ def get_full_block(filepath, byte_offset):
                 parts.append(decompressor.decompress(chunk))
             except EOFError:
                 break 
-                
-        return b"".join(parts).decode('utf-8')
+        try:
+            return b"".join(parts).decode('utf-8')
+        except UnicodeDecodeError as e:
+            logging.error(f"Unicode decode error in {filepath} at offset {byte_offset}. Skipping block. Error: {e}")
+            return None
+
     
-def get_title_id_from_page(page):
+def get_title_id_from_page(page: str) -> Tuple[str, str]:
+    """
+    Extracts the page title and ID from a Wikipedia XML page (actually page is string) fragment using slicing.
+    """
     tmp = page.partition('<revision>')[0]
     title_start = tmp.find('<title>') + 7
     title_end = tmp.find('</title>')
@@ -154,7 +190,10 @@ def get_title_id_from_page(page):
     return title, page_id
 
 
-def multistream_to_mongodb(mongodb_client, filepath, indices):
+def multistream_to_mongodb(mongodb_client: 'MongoClient', filepath: str, indices: List[int]) -> None:
+    """
+    Processes a Wikipedia multistream xml blocks and performs bulk upserts to MongoDB.
+    """
     logger.info(f"Upserting records to MongoDB scraper_db/wikipedia from file: {filepath}")
     batch = []
     batch_size = 30

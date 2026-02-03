@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 download_path = 'scrapers/wiki/downloaded_data/'
 MONGODB_URI = "mongodb://admin:pass123@localhost:27017/"
 mongodb_client = MongoManager(MONGODB_URI, "scraper_db")
+rss_url = "https://dumps.wikimedia.org/plwiki/latest/plwiki-latest-pages-articles-multistream-index.txt.bz2-rss.xml"
 
 if __name__ == "__main__":
     logger.info('WIKI SCRAPER')
@@ -21,7 +22,7 @@ if __name__ == "__main__":
         logger.critical('Could not establish connection with MongoDB')
         exit(1)
     Path(download_path).mkdir(parents=True, exist_ok=True)
-    dumpstatus_url = get_latest_dumpstatus_url()
+    dumpstatus_url = get_latest_dumpstatus_url(rss_url)
     dumpstatus = fetch_dumpstatus(dumpstatus_url)
     
     articlesmultistreamdump = dumpstatus.get('jobs',{}).get('articlesmultistreamdump')
