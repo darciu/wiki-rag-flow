@@ -1,3 +1,4 @@
-tqdm
-asyncio
-pymongo
+aiohttp==3.13.3
+pymongo==4.16.0
+Requests==2.32.5
+tqdm==4.67.1

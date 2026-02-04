@@ -1,6 +1,6 @@
 from pathlib import Path
 import asyncio
-import pickle
+import os
 from scrapers.wiki.utils import get_latest_dumpstatus_url, fetch_dumpstatus, is_dump_done, get_download_urls, pair_wiki_files, get_unique_indices, multistream_to_mongodb
 from scrapers.wiki.async_func import run_scraper
 from backend.db.mongodb.connection import MongoManager
@@ -11,7 +11,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-download_path = 'scrapers/wiki/downloaded_data/'
+download_path = os.getenv('WIKI_DOWNLOAD_PATH', './data/wiki_dumps')
 MONGODB_URI = "mongodb://admin:pass123@localhost:27017/"
 mongodb_client = MongoManager(MONGODB_URI, "scraper_db")
 rss_url = "https://dumps.wikimedia.org/plwiki/latest/plwiki-latest-pages-articles-multistream-index.txt.bz2-rss.xml"
