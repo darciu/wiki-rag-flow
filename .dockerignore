@@ -1,0 +1,9 @@
+backend/db/mongodb/data
+data
+
+**/.git
+**/__pycache__
+**/*.pyc
+.venv
+.env
+*.ipynb
