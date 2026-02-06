@@ -1,12 +1,13 @@
-name: Ruff Quality Check
+name: Quality Check
 
 on: [push, pull_request]
 
 jobs:
-  ruff:
+  quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Run Ruff
         uses: astral-sh/ruff-action@v1
@@ -17,3 +18,17 @@ jobs:
         uses: astral-sh/ruff-action@v1
         with:
           args: "format --check"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/backend.txt -r requirements/frontend.txt -r requirements/parser.txt -r requirements/scraper.txt
+          pip install ruff mypy
+
+      - name: Run Mypy
+        run: mypy .
