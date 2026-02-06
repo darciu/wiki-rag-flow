@@ -150,7 +150,7 @@ def get_unique_indices(filepath: str) -> list[int]:
                     print(f"Error. Offset is not numeric: {parts[0]}")
                     continue
 
-    return sorted(list(offsets))
+    return sorted(offsets)
 
 
 def get_full_block(filepath: str, byte_offset: int) -> str:
