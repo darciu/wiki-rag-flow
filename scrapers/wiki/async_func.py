@@ -1,9 +1,10 @@
 import asyncio
 import logging
-import aiohttp
 from pathlib import Path
+
+import aiohttp
 from tqdm import tqdm
-from typing import List, Dict
+
 from scrapers.wiki.utils import check_md5
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ async def download_file(
                 logger.exception(f"Following exception has occured: {e}")
 
 
-async def run_scraper(download_urls: List[Dict[str, str]], download_path: str) -> None:
+async def run_scraper(download_urls: list[dict[str, str]], download_path: str) -> None:
     """Orchestrates the scraping process using a semaphore to limit concurrency."""
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
 

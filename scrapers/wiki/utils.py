@@ -1,12 +1,13 @@
-from typing import Optional, Any, Dict, List, Tuple, TYPE_CHECKING
-from tqdm import tqdm
-import xml.etree.ElementTree as ET
-import requests
-import re
-import logging
-import hashlib
-from pathlib import Path
 import bz2
+import hashlib
+import logging
+import re
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import requests
+from tqdm import tqdm
 
 if TYPE_CHECKING:
     from pymongo import MongoClient
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_latest_dumpstatus_url(rss_url) -> Optional[str]:
+def get_latest_dumpstatus_url(rss_url) -> str | None:
     """
     Retrieves the latest Wikimedia dump date from RSS and returns the dumpstatus.json URL.
     """
@@ -43,7 +44,7 @@ def get_latest_dumpstatus_url(rss_url) -> Optional[str]:
         raise
 
 
-def fetch_dumpstatus(dumpstatus_url) -> Dict[str, Any]:
+def fetch_dumpstatus(dumpstatus_url) -> dict[str, Any]:
     """
     Downloads and parses the Wikimedia dumpstatus JSON metadata.
     """
@@ -65,7 +66,7 @@ def fetch_dumpstatus(dumpstatus_url) -> Dict[str, Any]:
         raise
 
 
-def is_dump_done(articlesmultistreamdump: Dict[str, Any]) -> bool:
+def is_dump_done(articlesmultistreamdump: dict[str, Any]) -> bool:
     """
     Checks if the Wikipedia articles multistream dump status is 'done'.
     """
@@ -77,7 +78,7 @@ def is_dump_done(articlesmultistreamdump: Dict[str, Any]) -> bool:
         return False
 
 
-def get_download_urls(articlesmultistreamdump: Dict[str, Any]) -> List[Dict[str, str]]:
+def get_download_urls(articlesmultistreamdump: dict[str, Any]) -> list[dict[str, str]]:
     """
     Extracts download URLs and their MD5 checksums from the dump metadata.
     """
@@ -100,7 +101,7 @@ def check_md5(filepath: str, wiki_md5: str) -> bool:
     return actual_md5 == wiki_md5
 
 
-def pair_wiki_files(folder_path: str) -> List[Dict[str, str]]:
+def pair_wiki_files(folder_path: str) -> list[dict[str, str]]:
     """
     Pairs Wikipedia multistream index files with their corresponding data files inside download folder.
     """
@@ -131,7 +132,7 @@ def pair_wiki_files(folder_path: str) -> List[Dict[str, str]]:
     return pairs
 
 
-def get_unique_indices(filepath: str) -> List[int]:
+def get_unique_indices(filepath: str) -> list[int]:
     """
     Extracts and sorts unique byte offsets from a Wikipedia multistream index file.
     It is necessary for further reading bz2 files with articles.
@@ -179,7 +180,7 @@ def get_full_block(filepath: str, byte_offset: int) -> str:
             return None
 
 
-def get_title_id_from_page(page: str) -> Tuple[str, str]:
+def get_title_id_from_page(page: str) -> tuple[str, str]:
     """
     Extracts the page title and ID from a Wikipedia XML page (actually page is string) fragment using slicing.
     """
@@ -195,7 +196,7 @@ def get_title_id_from_page(page: str) -> Tuple[str, str]:
 
 
 def multistream_to_mongodb(
-    mongodb_client: "MongoClient", filepath: str, indices: List[int]
+    mongodb_client: "MongoClient", filepath: str, indices: list[int]
 ) -> None:
     """
     Processes a Wikipedia multistream xml blocks and performs bulk upserts to MongoDB.
