@@ -51,3 +51,4 @@ class MongoManager:
         if operations:
             collection = self.db[collection_name]
             return collection.bulk_write(operations, ordered=False)
+        return None

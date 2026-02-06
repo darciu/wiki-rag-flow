@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 import aiohttp
+import anyio
 from tqdm import tqdm
 
 from scrapers.wiki.utils import check_md5
@@ -26,7 +27,7 @@ async def download_file(
     file_full_path = Path(download_path) / filename
     max_retries = 3
 
-    if Path(file_full_path).exists():
+    if anyio.Path(file_full_path).exists():
         logger.info(f"File {filename} already exists")
         return
 
@@ -62,7 +63,7 @@ async def download_file(
                         logger.error(
                             f"MD5 of downloaded file {filename} is not correct"
                         )
-                        file = Path(file_full_path)
+                        file = anyio.Path(file_full_path)
                         file.unlink()
                         logger.info(f"File {filename} has been deleted")
                     else:
