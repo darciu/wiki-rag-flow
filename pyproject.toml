@@ -26,8 +26,9 @@ target-version = "py313"
 # A - Python's names are not allowed in the code (id, list, sum etc.)
 # PT - pytest standards are beeing keept
 # C4 - optimise building of lists and dictionaries of comprehensions
+# PTH - do not allow using os.path
 # E501 - line is too long
-select = ["E", "F", "I", "B", "UP", "N", "A", "PT", "C4"]
+select = ["E", "F", "I", "B", "UP", "N", "A", "PT", "C4", "PTH"]
 ignore = ["E501"]
 
 
