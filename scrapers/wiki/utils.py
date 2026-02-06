@@ -73,7 +73,7 @@ def is_dump_done(articlesmultistreamdump: dict[str, Any]) -> bool:
     if articlesmultistreamdump.get("status", "") == "done":
         logger.info("Articles multistream dump is ready to download")
         return True
-    
+
     logger.error("Articles multistream dump is not ready to download")
     return False
 
