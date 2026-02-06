@@ -49,7 +49,7 @@ async def download_file(
                         leave=False,
                     )
 
-                    with open(file_full_path, "wb") as f:
+                    with Path.open(file_full_path, "wb") as f:
                         async for chunk in response.content.iter_chunked(
                             1024 * 64
                         ):  # 64KB chunks

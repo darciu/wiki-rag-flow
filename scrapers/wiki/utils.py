@@ -94,7 +94,7 @@ def check_md5(filepath: str, wiki_md5: str) -> bool:
     """
     Verifies the file integrity by comparing its MD5 hash with the provided checksum.
     """
-    with open(filepath, "rb") as f:
+    with Path.open(filepath, "rb") as f:
         digest = hashlib.file_digest(f, "md5")
         actual_md5 = digest.hexdigest()
 
@@ -157,7 +157,7 @@ def get_full_block(filepath: str, byte_offset: int) -> str:
     """
     Extracts and decompresses a single BZ2 block from a specific byte offset (index) in a file.
     """
-    with open(filepath, "rb") as f:
+    with Path.open(filepath, "rb") as f:
         f.seek(byte_offset)
 
         decompressor = bz2.BZ2Decompressor()
