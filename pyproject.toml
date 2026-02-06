@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wiki_rag_flow"
+version = "0.1.0"
+description = "Scrape wiki articles and build a RAG based on this data with FastAPI and GenAI solutions"
+authors = [
+    {name = "Dariusz Giemza", email = "giemzadariusz@gmail.com"}
+]
+requires-python = ">=3.13"
+
+
+[tool.ruff]
+line-length = 88  
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"] 
+ignore = ["E501"]
+
+
+[tool.mypy]
+python_version = "3.13"
+strict = true # strict typing check
+warn_return_any = true # warns if function returns any type if its not correct with typing
+ignore_missing_imports = true # if function does not have typing output, then ignore
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

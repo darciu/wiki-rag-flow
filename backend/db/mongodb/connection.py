@@ -1,5 +1,6 @@
-from typing import List, Dict, Any, Optional, Type
 from types import TracebackType
+from typing import Any
+
 from pymongo import MongoClient, UpdateOne
 from pymongo.errors import ConnectionFailure, OperationFailure
 from pymongo.results import BulkWriteResult
@@ -17,9 +18,9 @@ class MongoManager:
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         """Exit the runtime context and close the connection."""
         self.close()
@@ -37,8 +38,8 @@ class MongoManager:
             return False
 
     def bulk_upsert(
-        self, collection_name: str, batch: List[Dict[str, Any]], id_field: str = "_id"
-    ) -> Optional[BulkWriteResult]:
+        self, collection_name: str, batch: list[dict[str, Any]], id_field: str = "_id"
+    ) -> BulkWriteResult | None:
         """
         Perform a batch update/insert (upsert) operation.
         """

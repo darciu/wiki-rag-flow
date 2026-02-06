@@ -1,19 +1,20 @@
-from pathlib import Path
 import asyncio
-import os
-from scrapers.wiki.utils import (
-    get_latest_dumpstatus_url,
-    fetch_dumpstatus,
-    is_dump_done,
-    get_download_urls,
-    pair_wiki_files,
-    get_unique_indices,
-    multistream_to_mongodb,
-)
-from scrapers.wiki.async_func import run_scraper
-from scrapers.config import WikiScraperSettings
-from backend.db.mongodb.connection import MongoManager
 import logging
+import os
+from pathlib import Path
+
+from backend.db.mongodb.connection import MongoManager
+from scrapers.config import WikiScraperSettings
+from scrapers.wiki.async_func import run_scraper
+from scrapers.wiki.utils import (
+    fetch_dumpstatus,
+    get_download_urls,
+    get_latest_dumpstatus_url,
+    get_unique_indices,
+    is_dump_done,
+    multistream_to_mongodb,
+    pair_wiki_files,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
