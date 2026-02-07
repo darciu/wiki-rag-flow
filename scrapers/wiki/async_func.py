@@ -64,7 +64,7 @@ async def download_file(
                             f"MD5 of downloaded file {filename} is not correct"
                         )
                         file = anyio.Path(file_full_path)
-                        file.unlink()
+                        await file.unlink()
                         logger.info(f"File {filename} has been deleted")
                     else:
                         logger.info(f"File {filename} has passed md5 check")
