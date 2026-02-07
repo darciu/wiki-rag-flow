@@ -2,15 +2,15 @@ from types import TracebackType
 from typing import Any
 
 from pymongo import MongoClient, UpdateOne
+from pymongo.database import Database
 from pymongo.errors import ConnectionFailure, OperationFailure
 from pymongo.results import BulkWriteResult
-from pymongo.database import Database
 
 
 class MongoManager:
     client: MongoClient[Any]
     db: Database[Any]
-    
+
     def __init__(self, uri: str, db_name: str):
 
         self.client = MongoClient(uri)
