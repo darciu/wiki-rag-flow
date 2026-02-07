@@ -4,13 +4,13 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import requests
 from tqdm import tqdm
 
 if TYPE_CHECKING:
-    from pymongo import MongoClient
+    from backend.db.mongodb.connection import MongoManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +28,19 @@ def get_latest_dumpstatus_url(rss_url) -> str | None:
         root = ET.fromstring(response.content)
 
         # search all tree (.//) for tag item then tag link
-        item_link = root.find(".//item/link").text
+        element = root.find(".//item/link")
+        if element is not None:
+            item_link = element.text
+            # find eight numbers one afer another
+            if item_link is not None:
+                date_match = re.search(r"(\d{8})", item_link)
+            else:
+                return None
+        else:
+            return None
 
-        # find eight numbers one afer another
-        date_match = re.search(r"(\d{8})", item_link)
+        
+
         if not date_match:
             return None
 
@@ -53,7 +62,7 @@ def fetch_dumpstatus(dumpstatus_url) -> dict[str, Any]:
         response = requests.get(dumpstatus_url, timeout=10)
         response.raise_for_status()
 
-        return response.json()
+        return cast(dict[str, Any], response.json())
 
     except requests.exceptions.HTTPError as e:
         logger.error(f"HTTP error has occured. Status {response.status_code}: {e}")
@@ -94,7 +103,8 @@ def check_md5(filepath: str, wiki_md5: str) -> bool:
     """
     Verifies the file integrity by comparing its MD5 hash with the provided checksum.
     """
-    with Path.open(filepath, "rb") as f:
+    path = Path(filepath)
+    with path.open("rb") as f:
         digest = hashlib.file_digest(f, "md5")
         actual_md5 = digest.hexdigest()
 
@@ -153,11 +163,12 @@ def get_unique_indices(filepath: str) -> list[int]:
     return sorted(offsets)
 
 
-def get_full_block(filepath: str, byte_offset: int) -> str:
+def get_full_block(filepath: str, byte_offset: int) -> str | None:
     """
     Extracts and decompresses a single BZ2 block from a specific byte offset (index) in a file.
     """
-    with Path.open(filepath, "rb") as f:
+    path = Path(filepath)
+    with path.open("rb") as f:
         f.seek(byte_offset)
 
         decompressor = bz2.BZ2Decompressor()
@@ -196,7 +207,7 @@ def get_title_id_from_page(page: str) -> tuple[str, str]:
 
 
 def multistream_to_mongodb(
-    mongodb_client: "MongoClient", filepath: str, indices: list[int]
+    mongodb_client: MongoManager, filepath: str, indices: list[int]
 ) -> None:
     """
     Processes a Wikipedia multistream xml blocks and performs bulk upserts to MongoDB.
@@ -208,6 +219,8 @@ def multistream_to_mongodb(
     batch_size = 30
     for offset in tqdm(indices):
         full_xml_block = get_full_block(filepath, offset)
+        if full_xml_block is None:
+            continue
         pages = full_xml_block.split("<page>")
         for page in pages:
             if not page.isspace():

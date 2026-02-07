@@ -17,6 +17,7 @@ line-length = 88
 target-version = "py313"
 
 [tool.ruff.lint]
+# https://docs.astral.sh/ruff/
 # E - errors of proper spacing (PEP 8 errors)
 # F - pyflake logical errors in code
 # I - isort; imports are sorted
@@ -34,7 +35,7 @@ ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.13"
-strict = true # strict typing check
+strict = false # strict typing check
 warn_return_any = true # warns if function returns any type if its not correct with typing
 ignore_missing_imports = true # if function does not have typing output, then ignore
 

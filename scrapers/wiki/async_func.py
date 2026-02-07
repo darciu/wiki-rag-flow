@@ -35,7 +35,7 @@ async def download_file(
         for attempt in range(1, max_retries + 1):
             try:
                 if attempt > 1:
-                    asyncio.sleep(10)
+                    await asyncio.sleep(10)
                 logging.info(f"Attempt: {attempt} | Started downloading: {filename}")
                 async with session.get(url, timeout=None) as response:
                     response.raise_for_status()
@@ -59,7 +59,7 @@ async def download_file(
                                 progress_bar.update(len(chunk))
                     logger.info(f"Finished downloading: {filename}")
 
-                    if not check_md5(file_full_path, wiki_md5):
+                    if not check_md5(str(file_full_path), wiki_md5):
                         logger.error(
                             f"MD5 of downloaded file {filename} is not correct"
                         )
