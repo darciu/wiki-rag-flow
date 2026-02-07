@@ -22,8 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 wiki_scraper_settings = WikiScraperSettings()
-
-download_path = os.getenv("WIKI_DOWNLOAD_PATH", "./data/wiki_dumps")
+WIKI_DOWNLOAD_PATH = wiki_scraper_settings.WIKI_DOWNLOAD_PATH
 MONGODB_URI = wiki_scraper_settings.mongodb_uri
 mongodb_client = MongoManager(MONGODB_URI, "scraper_db")
 RSS_URL = wiki_scraper_settings.RSS_URL
@@ -33,20 +32,23 @@ if __name__ == "__main__":
     if not mongodb_client.is_healthy():
         logger.critical("Could not establish connection with MongoDB")
         exit(1)
-    Path(download_path).mkdir(parents=True, exist_ok=True)
+    Path(WIKI_DOWNLOAD_PATH).mkdir(parents=True, exist_ok=True)
     dumpstatus_url = get_latest_dumpstatus_url(RSS_URL)
+    if dumpstatus_url is None:
+        logger.critical("Could not find dumpstatus url")
+        exit(1)
     dumpstatus = fetch_dumpstatus(dumpstatus_url)
 
     articlesmultistreamdump = dumpstatus.get("jobs", {}).get("articlesmultistreamdump")
     if not is_dump_done(articlesmultistreamdump):
         exit(1)
     download_urls = get_download_urls(articlesmultistreamdump)
-    asyncio.run(run_scraper(download_urls, download_path))
+    asyncio.run(run_scraper(download_urls, WIKI_DOWNLOAD_PATH))
 
-    index_multistream_pairs = pair_wiki_files(download_path)
+    index_multistream_pairs = pair_wiki_files(WIKI_DOWNLOAD_PATH)
 
     for pair in index_multistream_pairs:
-        indices = get_unique_indices(download_path + pair["index"])
+        indices = get_unique_indices(WIKI_DOWNLOAD_PATH + pair["index"])
         multistream_to_mongodb(
-            mongodb_client, download_path + pair["multistream"], indices
+            mongodb_client, WIKI_DOWNLOAD_PATH + pair["multistream"], indices
         )
