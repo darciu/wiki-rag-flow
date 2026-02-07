@@ -1,0 +1,35 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: local_mongodb
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./backend/db/mongodb/data:/data/db
+      - ./backend/db/mongodb/schema/init-db.js:/docker-entrypoint-initdb.d/init-db.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  scraper:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile_scraper
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    container_name: wikipedia_scraper
+    volumes:
+      - ./data/wiki_dumps:/app/data/wiki_dumps
+    env_file:
+      - .env
+    profiles: ["tools"]

@@ -2,6 +2,7 @@
 .venv
 venv/
 env/
+data/
 __pycache__/
 
 *.ipynb
@@ -10,4 +11,6 @@ __pycache__/
 .vscode/
 tmp/
 temp/
-data/
+downloaded_data/
+.mypy_cache/
+.ruff_cache/

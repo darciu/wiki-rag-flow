@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wiki_rag_flow"
+version = "0.1.0"
+description = "Scrape wiki articles and build a RAG based on this data with FastAPI and GenAI solutions"
+authors = [
+    {name = "Dariusz Giemza", email = "giemzadariusz@gmail.com"}
+]
+requires-python = ">=3.13"
+
+
+[tool.ruff]
+line-length = 88  
+target-version = "py313"
+
+[tool.ruff.lint]
+# https://docs.astral.sh/ruff/
+# E - errors of proper spacing (PEP 8 errors)
+# F - pyflake logical errors in code
+# I - isort; imports are sorted
+# B - flake8 bugbear; not obvious situations that lead to na error
+# UP - pyupgrade; code style and behaviours adequate to current Python version
+# N - naming; proper naming of functions (snake_case), classes (PascalCase), consts (SCREAMING_SNAKE_CASE)
+# A - Python's names are not allowed in the code (id, list, sum etc.)
+# PT - pytest standards are beeing keept
+# C4 - optimise building of lists and dictionaries of comprehensions
+# PTH - do not allow using os.path
+# E501 - line is too long
+select = ["E", "F", "I", "B", "UP", "N", "A", "PT", "C4", "PTH", "ASYNC", "FAST", "RET"]
+ignore = ["E501"]
+
+
+[tool.mypy]
+python_version = "3.13"
+strict = false # strict typing check
+warn_return_any = true # warns if function returns any type if its not correct with typing
+ignore_missing_imports = true # if function does not have typing output, then ignore
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
