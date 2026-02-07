@@ -39,8 +39,6 @@ def get_latest_dumpstatus_url(rss_url) -> str | None:
         else:
             return None
 
-        
-
         if not date_match:
             return None
 
