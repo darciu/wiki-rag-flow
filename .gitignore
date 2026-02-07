@@ -12,3 +12,5 @@ __pycache__/
 tmp/
 temp/
 downloaded_data/
+.mypy_cache/
+.ruff_cache/
