@@ -1,6 +1,6 @@
 
 from abc import ABCMeta, abstractmethod
-from typing import List
+from typing import List, Tuple
 from parser.entities import NEREntities
 
 class NLP(metaclass=ABCMeta):
@@ -12,8 +12,13 @@ class NLP(metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def extract_keywords(self, text: List[str]) -> List[Tuple]:
+        """Extract keywords from text."""
+        pass
+
+    @abstractmethod
     def lemmatize(self, text_data: List[str], batch_size: int) -> List[str]:
-        """Extract Named Entity Recognition entities from text."""
+        """Lemmatize names and sunrnames in list"""
         pass
 
     @abstractmethod
