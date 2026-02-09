@@ -10,7 +10,7 @@ class WikiScraperSettings(BaseSettings):
 
     @property
     def mongodb_uri(self) -> str:
-        return f"mongodb://{self.MONGO_INITDB_ROOT_USERNAME}:{self.MONGO_INITDB_ROOT_PASSWORD}@mongodb:{27017}/?authSource=admin"  # log as admin
+        return f"mongodb://{self.MONGO_INITDB_ROOT_USERNAME}:{self.MONGO_INITDB_ROOT_PASSWORD}@mongodb:{self.MONGO_PORT}/?authSource=admin"  # log as admin
 
     # Load envs from .env file, get only relevant variables, variables are case sensitive
     model_config = SettingsConfigDict(

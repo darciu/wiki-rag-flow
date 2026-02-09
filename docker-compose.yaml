@@ -20,6 +20,63 @@ services:
       retries: 5
       start_period: 10s
 
+  weaviate:
+    image: semitechnologies/weaviate:1.24.1
+    container_name: local_weaviate
+    depends_on:
+      t2v-transformers:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    restart: always
+    environment:
+      QUERY_DEFAULTS_LIMIT: 5
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "text2vec-transformers"
+      ENABLE_MODULES: "text2vec-transformers"
+      TRANSFORMERS_INFERENCE_API: "http://t2v-transformers:8080"
+      CLUSTER_HOSTNAME: "node_local"
+    volumes:
+      - ./backend/db/weaviate/data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  t2v-transformers:
+    image: semitechnologies/transformers-inference:sentence-transformers-multi-qa-MiniLM-L6-cos-v1
+    container_name: t2v-transformer-model
+    platform: linux/amd64
+    environment:
+      ENABLE_CUDA: "0"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(1); exit(0) if s.connect_ex(('127.0.0.1', 8080)) == 0 else exit(1)",
+        ]
+      interval: 10s
+      timeout: 20s
+      retries: 5
+      start_period: 60s
+
+  verba:
+    image: semitechnologies/verba:latest
+    container_name: local_verba
+    ports:
+      - "8000:8000"
+    environment:
+      - WEAVIATE_URL_VERBA=http://weaviate:8080
+      # Jeśli używasz API Key, dodaj go tutaj, jeśli nie - zostaw puste
+    # depends_on:
+    #   weaviate:
+    #     condition: service_healthy
+
   scraper:
     build:
       context: .

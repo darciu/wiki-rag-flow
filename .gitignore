@@ -14,3 +14,4 @@ temp/
 downloaded_data/
 .mypy_cache/
 .ruff_cache/
+.pytest_cache/

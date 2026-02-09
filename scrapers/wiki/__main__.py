@@ -27,9 +27,9 @@ mongodb_client = MongoManager(MONGODB_URI, "scraper_db")
 RSS_URL = wiki_scraper_settings.RSS_URL
 
 if __name__ == "__main__":
-    logger.info("WIKI SCRAPER")
+    logger.info("SCRAPER WIKI")
     if not mongodb_client.is_healthy():
-        logger.critical("Could not establish connection with MongoDB")
+        logger.critical("SCRAPER WIKI Could not establish connection with MongoDB")
         exit(1)
     Path(WIKI_DOWNLOAD_PATH).mkdir(parents=True, exist_ok=True)
     dumpstatus_url = get_latest_dumpstatus_url(RSS_URL)

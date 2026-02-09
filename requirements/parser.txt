@@ -1,0 +1,4 @@
+installed protobuf-6.33.5 sentencepiece-0.2.1
+transformers
+pip install transformers[sentencepiece]
+torch
