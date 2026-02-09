@@ -8,3 +8,4 @@ data
 .env
 *.ipynb
 .pytest_cache/
+models/

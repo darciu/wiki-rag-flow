@@ -2,3 +2,4 @@ installed protobuf-6.33.5 sentencepiece-0.2.1
 transformers
 pip install transformers[sentencepiece]
 torch
+python -m spacy download pl_core_news_lg

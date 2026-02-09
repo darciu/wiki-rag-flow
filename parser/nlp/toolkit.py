@@ -3,10 +3,10 @@ from typing import List, Literal, Union, overload
 from parser.base import NLP
 from parser.nlp.ner import (
     HerbertNERClient,
-    NEREntities,
-    SpacyUtils,
     StanzaNERClient,
 )
+from parser.entities import NEREntities
+from parser.nlp.spacy import SpacyUtils
 
 NERModelName = Literal["herbert", "stanza"]
 
@@ -33,39 +33,25 @@ class NLPToolkit(NLP):
         """Uses the initialized NER model to extract entities from text."""
         return self.ner_client.parse_entities(text)
 
-    @overload
-    def lemmatize(self, text_data: str) -> str: ...
 
-    @overload
-    def lemmatize(self, text_data: List[str]) -> List[str]: ...
-
-    def lemmatize(self, text_data: Union[str, List[str]]) -> Union[str, List[str]]:
+    def lemmatize(self, names: List[str], batch_size: int = 512) -> List[str]:
         """
-        Lemmatizes input text using spaCy.
-        Allowed data types: string and list of strings.
-        Automatically routes the request to single or batch processing
-        based on input type.
+        Lemmatizes input list of texts using spaCy.
         """
-        if isinstance(text_data, str):
-            return self.spacy_utils.lemmatize_name(text_data)
+        if isinstance(names, list):
+            return self.spacy_utils.lemmatize_names(names, batch_size=batch_size)
 
-        if isinstance(text_data, list):
-            return self.spacy_utils.lemmatize_names(text_data)
+        raise TypeError("names must be a list of strings")
+    
+    def texts_readability_fog(self, texts: list[str], batch_size: int = 100) -> list[float]:
+        """
+        Gunning FOG Index (text readability) for list of texts calculated using spaCy.
+        """
+        if isinstance(texts, list):
+            return self.spacy_utils.texts_readability_fog(texts, batch_size=batch_size)
 
-        raise TypeError("text_data must be either a string or a list of strings")
+        raise TypeError("texts must be a list of strings")
+
     
 
-    def count_syllables_pl(self, word: str) -> int:
-        word = word.lower()
-        pl_vowels = "aeiouyąęó"
-        count = 0
-        
-        for i in range(len(word)):
-            if word[i] in pl_vowels:
-                # i before other pl_vowel
-                if word[i] == 'i' and i + 1 < len(word) and word[i+1] in pl_vowels:
-                    continue
-                count += 1
-                
-        return max(1, count)
     

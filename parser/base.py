@@ -1,6 +1,6 @@
 
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Any, List, Literal, Union, overload
+from typing import List
 from parser.entities import NEREntities
 
 class NLP(metaclass=ABCMeta):
@@ -11,15 +11,14 @@ class NLP(metaclass=ABCMeta):
         """Extract Named Entity Recognition entities from text."""
         pass
 
-    @overload
     @abstractmethod
-    def lemmatize(self, text_data: str) -> str: ...
-
-    @overload
-    @abstractmethod
-    def lemmatize(self, text_data: List[str]) -> List[str]: ...
+    def lemmatize(self, text_data: List[str], batch_size: int) -> List[str]:
+        """Extract Named Entity Recognition entities from text."""
+        pass
 
     @abstractmethod
-    def lemmatize(self, text_data: Union[str, List[str]]) -> Union[str, List[str]]:
-        """Lemmatize text or list of texts."""
+    def texts_readability_fog(self, texts: list[str], batch_size: int) -> list[float]:
+        """
+        Gunning FOG Index (text readability) for list of texts calculated using spaCy.
+        """
         pass
