@@ -1,5 +1,5 @@
 from types import TracebackType
-from typing import Any
+from typing import Any, Generator
 
 from pymongo import MongoClient, UpdateOne
 from pymongo.database import Database
@@ -56,3 +56,28 @@ class MongoManager:
             collection = self.db[collection_name]
             return collection.bulk_write(operations, ordered=False)
         return None
+    
+    def fetch_batches(
+        self, 
+        collection_name: str, 
+        filter_query: dict[str, Any] | None = None, 
+        projection: dict[str, Any] | None = None, 
+        batch_size: int = 1000
+    ) -> Generator[list[dict[str, Any]], None, None]:
+
+        collection = self.db[collection_name]
+
+        cursor = collection.find(
+            filter_query or {}, 
+            projection or {}
+        ).batch_size(batch_size)
+
+        batch = []
+        for doc in cursor:
+            batch.append(doc)
+            if len(batch) >= batch_size:
+                yield batch
+                batch = []
+        
+        if batch:
+            yield batch

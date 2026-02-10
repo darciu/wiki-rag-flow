@@ -1,12 +1,10 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class WikiScraperSettings(BaseSettings):
+class MongoDBSettings(BaseSettings):
     MONGO_INITDB_ROOT_USERNAME: str = ""
     MONGO_INITDB_ROOT_PASSWORD: str = ""
-    WIKI_DOWNLOAD_PATH: str = "/app/data/wiki_dumps/"
     MONGO_PORT: int = 27017
-    RSS_URL: str = "https://dumps.wikimedia.org/plwiki/latest/plwiki-latest-pages-articles-multistream-index.txt.bz2-rss.xml"
 
     @property
     def mongodb_uri(self) -> str:
@@ -16,3 +14,8 @@ class WikiScraperSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", extra="ignore", case_sensitive=True
     )
+
+class ScraperSettings(BaseSettings):
+
+    WIKI_DOWNLOAD_PATH: str = "/app/data/wiki_dumps/"
+    RSS_URL: str = "https://dumps.wikimedia.org/plwiki/latest/plwiki-latest-pages-articles-multistream-index.txt.bz2-rss.xml"

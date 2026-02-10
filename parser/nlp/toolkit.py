@@ -8,9 +8,11 @@ from parser.nlp.ner import (
 from parser.entities import NEREntities
 from parser.nlp.spacy import SpacyUtils
 from parser.nlp.keywords import VLT5KeywordsClient, KeyBERTKeywordsClient
+from parser.nlp.chunking import LangchainSplitterClient, StatisticalChunkerClient
 
 NERModelName = Literal["herbert", "stanza"]
 KeywordsModelName = Literal["vlt5", "keybert"]
+ChunkingModelName = Literal["langchain","statistical_chunker"]
 
 
 class NLPToolkit(NLP):
@@ -23,7 +25,7 @@ class NLPToolkit(NLP):
 
     ner_client: Union[HerbertNERClient, StanzaNERClient]
 
-    def __init__(self, ner_model_name: NERModelName = "stanza", keywords_model_name: KeywordsModelName = 'keybert'):
+    def __init__(self, ner_model_name: NERModelName = "stanza", keywords_model_name: KeywordsModelName = 'keybert', chunking_model_name: ChunkingModelName = 'langchain'):
         if ner_model_name == "herbert":
             self.ner_client = HerbertNERClient()
         elif ner_model_name == "stanza":
@@ -34,7 +36,13 @@ class NLPToolkit(NLP):
         elif keywords_model_name == "vlt5":
             self.keywords_client = VLT5KeywordsClient()
 
-        self.spacy_utils = SpacyUtils()
+        if chunking_model_name == "langchain":
+            self.chunking_client = LangchainSplitterClient()
+        elif chunking_model_name == "statistical_chunker":
+            self.chunking_client = StatisticalChunkerClient()
+
+
+        self._spacy_utils = SpacyUtils()
 
     def extract_ner_entities(self, text: str) -> NEREntities:
         """Uses the initialized NER model to extract entities from text."""
@@ -50,7 +58,7 @@ class NLPToolkit(NLP):
         Lemmatizes input list of texts using spaCy.
         """
         if isinstance(names, list):
-            return self.spacy_utils.lemmatize_names(names, batch_size=batch_size)
+            return self._spacy_utils.lemmatize_names(names, batch_size=batch_size)
 
         raise TypeError("names must be a list of strings")
     
@@ -59,9 +67,14 @@ class NLPToolkit(NLP):
         Gunning FOG Index (text readability) for list of texts calculated using spaCy.
         """
         if isinstance(texts, list):
-            return self.spacy_utils.texts_readability_fog(texts, batch_size=batch_size)
+            return self._spacy_utils.texts_readability_fog(texts, batch_size=batch_size)
 
         raise TypeError("texts must be a list of strings")
+    
+    def split_texts(self, texts: list[str], max_tokens) -> List[list[str]]:
+        """Split given texts into chunks"""
+
+        return self.chunking_client.split_texts(texts, max_tokens)
 
     
 
