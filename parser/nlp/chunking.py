@@ -51,7 +51,7 @@ class LangchainSplitterClient:
 
         return LangchainSplitterClient._tokenizer
     
-    def split_texts(self, texts, max_tokens):
+    def chunk_texts(self, texts, max_tokens):
         tokenizer = self._get_tokenizer()
         splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
             tokenizer,
@@ -117,7 +117,7 @@ class StatisticalChunkerClient:
         return LangchainSplitterClient._tokenizer
     
 
-    def split_texts(self, texts, max_tokens):
+    def chunk_texts(self, texts, max_tokens):
         encoder = self._get_encoder()
         chunker = StatisticalChunker(
             encoder=encoder,   

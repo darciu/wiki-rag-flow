@@ -55,7 +55,7 @@ class NLPToolkit(NLP):
 
     def lemmatize(self, names: List[str], batch_size: int = 512) -> List[str]:
         """
-        Lemmatizes input list of texts using spaCy.
+        Lemmatizes input list of texts using spaCy
         """
         if isinstance(names, list):
             return self._spacy_utils.lemmatize_names(names, batch_size=batch_size)
@@ -64,17 +64,17 @@ class NLPToolkit(NLP):
     
     def texts_readability_fog(self, texts: list[str], batch_size: int = 100) -> list[float]:
         """
-        Gunning FOG Index (text readability) for list of texts calculated using spaCy.
+        Gunning FOG Index (text readability) for list of texts calculated using spaCy
         """
         if isinstance(texts, list):
             return self._spacy_utils.texts_readability_fog(texts, batch_size=batch_size)
 
         raise TypeError("texts must be a list of strings")
     
-    def split_texts(self, texts: list[str], max_tokens) -> List[list[str]]:
-        """Split given texts into chunks"""
+    def chunk_texts(self, texts: list[str], max_tokens) -> List[list[str]]:
+        """Partition input texts into semantic or logical chunks"""
 
-        return self.chunking_client.split_texts(texts, max_tokens)
+        return self.chunking_client.chunk_texts(texts, max_tokens)
 
     
 

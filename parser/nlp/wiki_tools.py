@@ -97,8 +97,8 @@ def fetch_wiki_clean_sections(text):
 
     ignored = ["Uwagi", "Przypisy", "Zobacz też", "Linki zewnętrzne", "Bibliografia", "Statystyki"]
     cleaned_dict = {
-        k: v for k, v in final_dict.items() 
+        k: v.replace('\xa0k', '').strip() for k, v in final_dict.items() 
         if k not in ignored and v.strip()
     }
-
+    # usunąć \xa0k z tekstów (wcześniej to &nbsp; przed wikiparserem)
     return cleaned_dict

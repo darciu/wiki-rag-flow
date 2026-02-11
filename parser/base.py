@@ -27,3 +27,8 @@ class NLP(metaclass=ABCMeta):
         Gunning FOG Index (text readability) for list of texts calculated using spaCy.
         """
         pass
+
+    @abstractmethod
+    def chunk_texts(self, texts: list[str], max_tokens) -> List[list[str]]:
+        """Partition input texts into semantic or logical chunks"""
+        pass
