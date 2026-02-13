@@ -26,7 +26,8 @@ if __name__ == "__main__":
         exit(1)
     # analogicznie sprawdzenie połączenia z weaviate
         
-    
+    weaviate_batch = []
+    mongodb_batch = []
     generator = mongodb_client.fetch_batches("wikipedia", batch_size=100)
     for batch in generator:
 
@@ -44,10 +45,12 @@ if __name__ == "__main__":
                 wiki_infobox_data = fetch_wiki_infobox_data(wikicode)
                 wiki_sections = fetch_wiki_clean_sections(content)
                 cleaned_text = "\n".join([item for k, v in wiki_sections.items() for item in (k, v)])
+                mongodb_load = {'source_id':source_id, 'content':cleaned_text}
+                mongodb_batch.append(mongodb_load)
 
                 keys = list(wiki_sections.keys())
-                descriptions = list(wiki_sections.values())
-                chunks = nlp_toolkit.chunk_texts(descriptions, max_tokens=300)
+                values = list(wiki_sections.values())
+                chunks = nlp_toolkit.chunk_texts(values, max_tokens=300)
                 wiki_dict = {keys[i]: chunks[i] for i in range(len(keys))}
 
                 wiki_chunks = [f"{name}: {desc}" for name, desc_list in wiki_dict.items() for desc in desc_list]
@@ -79,8 +82,9 @@ if __name__ == "__main__":
                 for chunk_id, (chunk_text, readability) in enumerate(zip(wiki_chunks, readabilities)):
                     chunk_struct = common_structure.copy()
                     chunk_struct.update({'chunk_id':chunk_id,
-                                            'chunk_text':chunk_text,
-                                            'readability':readability})
+                                        'chunk_text':chunk_text,
+                                        'readability':readability})
                     
                     chunk_structures.append(chunk_struct)
 
+    mongodb_client.bulk_upsert(mongodb_batch)

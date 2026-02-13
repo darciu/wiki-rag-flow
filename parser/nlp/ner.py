@@ -18,32 +18,56 @@ class HerbertNERClient:
         self.model_dir = Path("models") / "herbert-base-ner"
 
     def _get_pipeline(self):
-        if self._pipeline is None:
-            if not Path(self.model_dir).is_dir():
-                print(f"Loading model from {self.model_checkpoint}...")
-                tokenizer = AutoTokenizer.from_pretrained(self.model_checkpoint)
-                model = AutoModelForTokenClassification.from_pretrained(
-                    self.model_checkpoint
-                )  # noqa: E501
-                tokenizer.save_pretrained(self.model_dir)
-                model.save_pretrained(self.model_dir)
-            else:
-                print(f"Loading model from {self.model_dir}...")
-                tokenizer = AutoTokenizer.from_pretrained(self.model_dir)
-                model = AutoModelForTokenClassification.from_pretrained(self.model_dir)
+        if HerbertNERClient._pipeline is None:
 
-            HerbertNERClient._pipeline = pipeline(
-                "ner", model=model, tokenizer=tokenizer
-            )
-            print("Model has been loaded")
+            required_files = [
+                "config.json", 
+                "model.safetensors", 
+                "tokenizer.json", 
+                "tokenizer_config.json",
+            ]
+        
+            complete_dir_and_files = self.model_dir.exists() and all((self.model_dir / f).exists() for f in required_files)
+            if not complete_dir_and_files:
+                
+                print(f"Load model and tokenizer from remote: {self.model_checkpoint}...")
+
+                if self.model_dir.exists():
+                    for item in sorted(self.model_dir.rglob("*"), reverse=True):
+                        item.unlink() if item.is_file() else item.rmdir()
+                else:
+                    self.model_dir.mkdir(parents=True, exist_ok=True)
+
+                    tokenizer = AutoTokenizer.from_pretrained(self.model_checkpoint)
+                    model = AutoModelForTokenClassification.from_pretrained(
+                        self.model_checkpoint
+                    )
+                    tokenizer.save_pretrained(self.model_dir)
+                    model.save_pretrained(self.model_dir)
+                    
+                    HerbertNERClient._pipeline = pipeline(
+                        "ner", model=model, tokenizer=tokenizer
+                    )
+            else:
+                print(f"Loading model from local directory: {self.model_dir}...")
+                try:
+                    tokenizer = AutoTokenizer.from_pretrained(self.model_dir)
+                    model = AutoModelForTokenClassification.from_pretrained(self.model_dir)
+
+                    HerbertNERClient._pipeline = pipeline(
+                        "ner", model=model, tokenizer=tokenizer
+                    )
+                except:
+                    print(f"Error while loading: {e}. Try delete local directory manually: {self.model_dir}")
+                    raise
 
         return HerbertNERClient._pipeline
 
-    def extract_raw_entities(self, text: str) -> List[dict]:
-        """Extract all entities from given text"""
+    def extract_raw_entities(self, texts: List[str]) -> List[List[dict]]:
+        """Extract all entities from given list of texts using batch processing"""
 
         ner_pipeline = self._get_pipeline()
-        return ner_pipeline(text)
+        return ner_pipeline(texts)
 
     def group_entities(self, ner_output: List[dict]) -> dict:
         """Group NERs withing three categories: PER, LOC, ORG"""
@@ -69,6 +93,7 @@ class HerbertNERClient:
                     )
                 current_type = tag[2:]
                 current_entity = [word]
+                current_entity_score = [score]
 
             elif tag.startswith("I-") and current_type == tag[2:]:
                 current_entity.append(word)
@@ -83,8 +108,10 @@ class HerbertNERClient:
                         }
                     )
                 current_entity = []
+                current_entity_score = []
                 current_type = None
 
+        # last remaining entity
         if current_entity and current_type:
             entities[current_type].append(
                 {"entity": "".join(current_entity), "score": mean(current_entity_score)}
@@ -110,32 +137,40 @@ class HerbertNERClient:
 
         return result.strip()
 
-    def parse_entities(self, text) -> NEREntities:
+    def parse_entities(self, texts: List[str]) -> List[NEREntities]:
         """Combined logic of extracting, cleaning and parsing NER entities"""
-        entities_herbert = self.extract_raw_entities(text)
-        grouped_entities = self.group_entities(entities_herbert)
-        personalia = [
-            {
-                "entity": self.fix_spacing_full_names(elem["entity"]),
-                "score": elem["score"],
-            }
-            for elem in grouped_entities["PER"]
-        ]
-        locations = [
-            {
-                "entity": self.fix_spacing_full_names(elem["entity"]),
-                "score": elem["score"],
-            }
-            for elem in grouped_entities["LOC"]
-        ]
-        organizations = [
-            {
-                "entity": self.fix_spacing_full_names(elem["entity"]),
-                "score": elem["score"],
-            }
-            for elem in grouped_entities["ORG"]
-        ]
-        return NEREntities(personalia, locations, organizations)
+
+        batch_raw_entities = self.extract_raw_entities(texts)
+        results = []
+
+        for raw_entities in batch_raw_entities:
+            grouped_entities = self.group_entities(raw_entities)
+
+
+            personalia = [
+                {
+                    "entity": self.fix_spacing_full_names(elem["entity"]),
+                    "score": elem["score"],
+                }
+                for elem in grouped_entities["PER"]
+            ]
+            locations = [
+                {
+                    "entity": self.fix_spacing_full_names(elem["entity"]),
+                    "score": elem["score"],
+                }
+                for elem in grouped_entities["LOC"]
+            ]
+            organizations = [
+                {
+                    "entity": self.fix_spacing_full_names(elem["entity"]),
+                    "score": elem["score"],
+                }
+                for elem in grouped_entities["ORG"]
+            ]
+
+            results.append(NEREntities(personalia, locations, organizations))
+        return results
 
 
 class StanzaNERClient:
@@ -144,29 +179,38 @@ class StanzaNERClient:
     def __init__(self):
         self.model_dir = Path("models") / "stanza"
 
+    
     def _get_model(self):
         if self._nlp_stanza is None:
-            if not (Path(self.model_dir) / "pl").is_dir():
-                print(
-                    f"Model is downloaded from external resource to location {self.model_dir}")  # noqa: E501
-                stanza.download("pl", model_dir=str(self.model_dir))
+            required_files = [
+                "resources.json",
+            ]
+        
+            complete_dir_and_files = self.model_dir.exists() and all((self.model_dir / f).exists() for f in required_files)
+            if not complete_dir_and_files:
+                if self.model_dir.exists():
+                    for item in sorted(self.model_dir.rglob("*"), reverse=True):
+                        item.unlink() if item.is_file() else item.rmdir()
+                else:
+                    print(f"Model is downloaded from external resource to location {self.model_dir}")
+                    stanza.download("pl", model_dir=str(self.model_dir))
             else:
                 print(f"Model already exists in location: {self.model_dir}")
 
             StanzaNERClient._nlp_stanza = stanza.Pipeline(
                 "pl",
-                processors="tokenize,ner",  # noqa: E501
+                processors="tokenize,ner",
                 dir=str(self.model_dir),
             )
             print("Model has been loaded")
 
         return StanzaNERClient._nlp_stanza
 
-    def extract_raw_entities(self, text: str):
+    def extract_raw_entities(self, texts: List[str]):
         """Extract all entities from given text"""
 
         ner_model = self._get_model()
-        return ner_model(text)
+        return ner_model(texts)
 
     def filter_entities(self, document, pos_type: str):
         """Filter entities with pos_type: persName, placeName or orgName"""
@@ -193,20 +237,39 @@ class StanzaNERClient:
 
         return findings
 
-    def parse_entities(self, text) -> NEREntities:
-        """Combined logic of extracting, cleaning and parsing NER entities"""
-        stanza_entities = self.extract_raw_entities(text)
-        personalia = [
-            {"entity": elem, "score": 1.0}
-            for elem in self.filter_entities(stanza_entities, "persName")
-        ]
-        locations = [
-            {"entity": elem, "score": 1.0}
-            for elem in self.filter_entities(stanza_entities, "placeName")
-        ]
-        organizations = [
-            {"entity": elem, "score": 1.0}
-            for elem in self.filter_entities(stanza_entities, "orgName")
-        ]
-        return NEREntities(personalia, locations, organizations)
+    def parse_entities(self, texts: List[str]) -> List[NEREntities]:
+        """
+        Combined logic of extracting, cleaning and parsing NER entities.
+        Stanza in fact does not have batch processing, so process is iterating as single
+        model inferences
+        """
+        ner_model = self._get_model()
+        results = []
+        for text in texts:
+            if not text or not text.strip():
+
+                results.append(NEREntities([], [], []))
+                continue
+                
+            doc = ner_model(text)
+            
+            mapping = {
+                "persName": [],
+                "placeName": [],
+                "orgName": []
+            }
+            
+            for ent in doc.entities:
+                if ent.type in mapping:
+                    mapping[ent.type].append({
+                        "entity": ent.text, 
+                        "score": 1.0
+                    })
+            
+            results.append(NEREntities(
+                personalia=mapping["persName"],
+                locations=mapping["placeName"],
+                organizations=mapping["orgName"]
+            ))
+        return results
 
