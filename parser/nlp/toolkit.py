@@ -25,7 +25,7 @@ class NLPToolkit(NLP):
 
     ner_client: Union[HerbertNERClient, StanzaNERClient]
 
-    def __init__(self, ner_model_name: NERModelName = "stanza", keywords_model_name: KeywordsModelName = 'keybert', chunking_model_name: ChunkingModelName = 'langchain'):
+    def __init__(self, ner_model_name: NERModelName = "herbert", keywords_model_name: KeywordsModelName = 'keybert', chunking_model_name: ChunkingModelName = 'langchain'):
         if ner_model_name == "herbert":
             self.ner_client = HerbertNERClient()
         elif ner_model_name == "stanza":
@@ -44,9 +44,9 @@ class NLPToolkit(NLP):
 
         self._spacy_utils = SpacyUtils()
 
-    def extract_ner_entities(self, text: str) -> NEREntities:
+    def extract_ner_entities(self, texts: List[str]) -> List[NEREntities]:
         """Uses the initialized NER model to extract entities from text."""
-        return self.ner_client.parse_entities(text)
+        return self.ner_client.parse_entities(texts)
     
     def extract_keywords(self, texts: List[str]) -> List[Tuple]:
         """Uses the initialized model to extract keywords from text."""

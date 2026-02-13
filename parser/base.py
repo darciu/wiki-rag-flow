@@ -7,7 +7,7 @@ class NLP(metaclass=ABCMeta):
     """Abstract interface for NLP toolkit"""
 
     @abstractmethod
-    def extract_ner_entities(self, text: str) -> NEREntities:
+    def extract_ner_entities(self, texts: List[str]) -> List[NEREntities]:
         """Extract Named Entity Recognition entities from text."""
         pass
 
