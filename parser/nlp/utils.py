@@ -1,6 +1,16 @@
 import mwparserfromhell
 import re
 import html
+import logging
+import time
+import os
+import math
+from tqdm import tqdm
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 def fetch_wiki_categories(wikicode):
@@ -41,9 +51,13 @@ def fetch_wiki_infobox_data(wikicode):
                     val = template.get(field).value.strip_code().strip()
                     if val and not infobox_data[field]:
                         infobox_data[field] = val
-
+    infobox_data = {normalize_key(key):val for key, val in infobox_data.items() if val is not None}
     return infobox_data
 
+def normalize_key(key):
+    pl_map = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ ", "acelnoszzACELNOSZZ_")
+    key = key.translate(pl_map)
+    return key
 
 def fetch_wiki_clean_sections(text):
 
@@ -104,9 +118,14 @@ def fetch_wiki_clean_sections(text):
     return cleaned_dict
 
 
-def process_batch(batch):
+def process_batch(batch, batch_idx, expected_total_batches, time_start, mongodb_client, weaviate_client):
+
+    logger.info(f'Worker\'s PID: {os.getpid()}')
+    logger.info(f'Start new batch: {batch_idx}\n{get_progess_bar(batch_idx,expected_total_batches,time_start)}')
+    # if os.getppid() == 1:
+    #     os._exit(1)
     weaviate_batch = []
-    batch_for_clean = {}
+    mongodb_batch = []
     batch_for_short = {}
     batch_for_long = {}
     common_structure_batch = {}
@@ -114,6 +133,7 @@ def process_batch(batch):
         if any(x in txt['title'] for x in ['Kategoria:','Wątek:','Wikipedia:','Szablon:', 'Moduł:', 'Portal:', 'MediaWiki:', 'Pomoc:', 'Wikiprojekt:', 'Plik:']):
             pass
         else:
+            
             source_id = txt['_id']
             source_title = txt['title']
             wikicode = mwparserfromhell.parse(txt['content'])
@@ -133,7 +153,7 @@ def process_batch(batch):
             
             common_structure_batch[source_id] = common_structure
 
-            batch_for_clean[source_id] = cleaned_text
+            mongodb_batch.append({"_id":source_id, "plain_article":cleaned_text})
 
             sections = [f"{k}|||{v}" for k, v in wiki_sections.items()]
 
@@ -142,7 +162,7 @@ def process_batch(batch):
             batch_for_short[source_id] = {}
             batch_for_long[source_id] = {}
             for positional_id, text in enumerate(sections):
-                if len(text) < 1200:
+                if len(text) < 1000:
                     batch_for_short[source_id][positional_id] =  [text]
                 else:
                     batch_for_long[source_id][positional_id] = text
@@ -162,6 +182,9 @@ def process_batch(batch):
     prefixes = [text.split('|||', 1)[0] for text in long_texts_to_process]
     postfixes = [text.split('|||', 1)[1] for text in long_texts_to_process]
     
+
+    nlp_toolkit = RemoteNLPClient()
+
     chunked_texts = nlp_toolkit.chunk_texts(postfixes, max_tokens=450)
 
     result = [
@@ -208,4 +231,46 @@ def process_batch(batch):
                 weaviate_batch.append(chunk_struct)
                 cnt +=1
 
-    return weaviate_batch, batch_for_clean
+    weaviate_client.bulk_upsert(weaviate_batch)
+    logger.info(f'Batch of size {len(weaviate_batch)} has bea upserted into Weaviate database')
+    mongodb_client.bulk_upsert('wiki_plain_articles', mongodb_batch)
+    logger.info(f'Batch of size {len(mongodb_batch)} has bea upserted into MongoDB database')
+
+
+
+def get_progess_bar(n: int, total_n: int, time_start: float, unit: str = 'it') -> str:
+    progress_string = tqdm.format_meter(
+        n=n, 
+        total=total_n,
+        elapsed=time.time() - time_start, 
+        unit=unit,
+        bar_format="{l_bar}{bar}{r_bar}" 
+    )
+    return progress_string
+
+
+
+def get_optimal_workers(percentage=0.6):
+    total_cores = os.cpu_count() or 3
+    workers = math.floor(total_cores * percentage)
+    
+    return min(7, max(1, workers))
+
+import requests
+class RemoteNLPClient:
+    def __init__(self, api_url="http://host.docker.internal:8007"):
+        self.api_url = api_url
+
+    def extract_ner_entities(self, texts: list[str]):
+        resp = requests.post(f"{self.api_url}/ner", json={"texts": texts})
+        resp.raise_for_status()
+        return resp.json()
+
+    def chunk_texts(self, texts: list[str], max_tokens: int):
+        
+        resp = requests.post(
+            f"{self.api_url}/chunk", 
+            json={"texts": texts, "max_tokens": max_tokens}
+        )
+        resp.raise_for_status()
+        return resp.json()

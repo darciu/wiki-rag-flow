@@ -14,6 +14,17 @@ class MongoDBSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", extra="ignore", case_sensitive=True
     )
+class WeaviateSettings(BaseSettings):
+    WEAVIATE_APIKEY_KEY: str = ""
+    WEAVIATE_EMBEDDING_SERVER_URL: str = "http://0.0.0.0:8001/embed"
+    WEAVIATE_PORT: int = 8080
+    WEAVIATE_GRPC_PORT: int = 50051
+
+    # Load envs from .env file, get only relevant variables, variables are case sensitive
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", case_sensitive=True
+    )
+
 
 class ScraperSettings(BaseSettings):
 

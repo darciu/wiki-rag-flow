@@ -1,6 +1,19 @@
-installed protobuf-6.33.5 sentencepiece-0.2.1
-transformers
-pip install transformers[sentencepiece]
-torch
-python -m spacy download pl_core_news_lg
-stanza
+backend==0.2.4.1
+config==0.5.1
+keybert==0.9.0
+langchain_text_splitters==1.1.0
+mwparserfromhell==0.7.2
+semantic_chunkers==0.1.1
+semantic_router==0.1.12
+sentence_transformers==5.2.2
+stanza==1.11.0
+torch==2.10.0
+tqdm==4.67.1
+transformers==5.1.0
+pymongo==4.7.3
+Requests==2.32.5
+weaviate-client==4.19.2
+spacy==3.8.11
+pydantic-settings==2.12.0
+types-requests==2.32.4.20260107
+

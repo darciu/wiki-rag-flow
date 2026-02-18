@@ -16,3 +16,5 @@ downloaded_data/
 .ruff_cache/
 .pytest_cache/
 models/
+*.pid
+*.log
