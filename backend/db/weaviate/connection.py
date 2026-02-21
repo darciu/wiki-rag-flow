@@ -103,7 +103,7 @@ class WeaviateManager:
             r = requests.post(
                 self.native_embedding_url, 
                 json={"texts": texts, "normalize": True}, 
-                timeout=30
+                timeout=120
             )
             r.raise_for_status()
             return r.json()["vectors"]

@@ -15,12 +15,6 @@ EMB_PORT ?= 8008
 EMB_BASE := http://$(HOST):$(EMB_PORT)
 
 
-NLP_PORT ?= 8007
-WORKERS ?= 1
-NER_MODEL ?= herbert
-KEYWORDS_MODEL ?= keybert
-CHUNKING_MODEL ?= langchain
-
 .PHONY: emb-venv emb-run-bg emb-stop emb-health
 
 build-scraper:
@@ -59,22 +53,47 @@ emb-stop:
 emb-health:
 	@curl -fsS "$(EMB_BASE)/health" && echo || (echo "Healthcheck failed. See $(EMB_LOG)"; exit 1)
 
-
-run-nlp-server:
-	@echo "Uruchamianie serwera NLP na http://$(HOST):$(NLP_PORT)..."
-	@echo "Konfiguracja: NER=$(NER_MODEL), KW=$(KEYWORDS_MODEL), CHUNK=$(CHUNKING_MODEL)"
-	export PYTHONPATH=$PYTHONPATH:. && \
-	export NLP_NER_MODEL=$(NER_MODEL) && \
-	export NLP_KEYWORDS_MODEL=$(KEYWORDS_MODEL) && \
-	export NLP_CHUNKING_MODEL=$(CHUNKING_MODEL) && \
-	uvicorn local_servers.nlp_toolkit:app \
-		--host $(HOST) \
-		--port $(NLP_PORT) \
-		--workers $(WORKERS) \
-		--log-level info
-
 project-up: emb-run-bg
 	docker-compose up --build -d
 
 project-down: emb-stop
 	docker-compose down
+
+
+
+NLP_HOST ?= 127.0.0.1
+NLP_PORT ?= 8009
+NLP_WORKERS ?= 1
+NLP_APP_MODULE ?= local_servers.nlp_toolkit:app
+
+# --- Konfiguracja Modeli (Domyślne wartości) ---
+NLP_NER_MODEL ?= herbert
+NLP_KEYWORDS_MODEL ?= keybert
+NLP_CHUNKING_MODEL ?= langchain
+
+.PHONY: help run-nlp
+
+
+nlp-run: ## Uruchamia serwer na pojedynczym procesie
+	NLP_NER_MODEL=$(NLP_NER_MODEL) \
+	NLP_KEYWORDS_MODEL=$(NLP_KEYWORDS_MODEL) \
+	NLP_CHUNKING_MODEL=$(NLP_CHUNKING_MODEL) \
+	uvicorn $(NLP_APP_MODULE) --host $(NLP_HOST) --port $(NLP_PORT)
+
+nlp-health: ## Sprawdza status serwera
+	@curl -f http://$(NLP_HOST):$(NLP_PORT)/health || echo "\nBŁĄD: Serwer nie odpowiada na porcie $(NLP_PORT)"
+
+nlp-test-chunk: ## Testuje endpoint chunkowania
+	@echo "Wysyłanie testowego tekstu do http://$(NLP_HOST):$(NLP_PORT)/chunk..."
+	@curl -X POST http://$(NLP_HOST):$(NLP_PORT)/chunk \
+		-H "Content-Type: application/json" \
+		-d '{"texts": ["To jest bardzo długi tekst, który powinien zostać podzielony na mniejsze części przez model langchain.To jest bardzo długi tekst, który powinien zostać podzielony na mniejsze części przez model langchain.To jest bardzo długi tekst, który powinien zostać podzielony na mniejsze części przez model langchain."], "max_tokens": 60}' \
+		-w "\n"
+
+
+
+# prod: ## Uruchamia serwer dla multiprocessingu z określoną liczbą workerów
+# 	NLP_NER_MODEL=$(NLP_NER_MODEL) \
+# 	NLP_KEYWORDS_MODEL=$(NLP_KEYWORDS_MODEL) \
+# 	NLP_CHUNKING_MODEL=$(NLP_CHUNKING_MODEL) \
+# 	uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --workers $(WORKERS)

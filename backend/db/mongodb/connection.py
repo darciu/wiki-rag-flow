@@ -56,70 +56,41 @@ class MongoManager:
             collection = self.db[collection_name]
             return collection.bulk_write(operations, ordered=False)
         return None
+
+    def mark_processed(self, collection_name: str, ids: list[Any]) -> None:
+        if not ids:
+            return
+        col = self.db[collection_name]
+        col.update_many({"_id": {"$in": ids}}, {"$set": {"processed": True}})
     
-    def fetch_batches(
-        self, 
-        collection_name: str, 
-        excluded_collection_name: str | None = None, # <--- Nowy argument
-        filter_query: dict[str, Any] | None = None, 
-        projection: dict[str, Any] | None = None, 
-        batch_size: int = 1000
+    def fetch_unprocessed_batches(
+        self,
+        collection_name: str,
+        filter_query: dict[str, Any] | None = None,
+        projection: dict[str, Any] | None = None,
+        batch_size: int = 1000,
     ) -> Generator[list[dict[str, Any]], None, None]:
 
-        collection = self.db[collection_name]
-        
-        # 1. SCENARIUSZ: Anti-join (pomiń te, które są w drugiej kolekcji)
-        if excluded_collection_name:
-            pipeline = []
+        col = self.db[collection_name]
+        last_id = None
 
-            # A. Najpierw filtrujemy kolekcję źródłową (optymalizacja)
-            if filter_query:
-                pipeline.append({"$match": filter_query})
+        base = filter_query.copy() if filter_query else {}
+        base["processed"] = {"$ne": True}  # brak pola traktuje jako nieprzetworzone
 
-            # B. Wykonujemy LEFT JOIN z kolekcją wykluczeń
-            pipeline.append({
-                "$lookup": {
-                    "from": excluded_collection_name,  # Kolekcja do sprawdzenia (np. 'wiki_plain_articles')
-                    "localField": "_id",               # Pole w źródle (np. 'wikipedia')
-                    "foreignField": "_id",             # Pole w celu (musi być to samo ID!)
-                    "as": "__check_exists"             # Tymczasowe pole pomocnicze
-                }
-            })
+        while True:
+            q = dict(base)
+            if last_id is not None:
+                q["_id"] = {"$gt": last_id}
 
-            # C. Kluczowy moment: Wybieramy tylko te, gdzie tablica połączeń jest PUSTA
-            # To oznacza: "Weź te dokumenty, których ID NIE ZNALEZIONO w drugiej kolekcji"
-            pipeline.append({
-                "$match": {
-                    "__check_exists": {"$eq": []}
-                }
-            })
+            batch = list(
+                col.find(q, projection or {})
+                .sort("_id", 1)
+                .limit(batch_size)
+            )
+            if not batch:
+                break
 
-            # D. Sprzątanie (usuwamy pole pomocnicze)
-            pipeline.append({"$unset": "__check_exists"})
-
-            # E. Opcjonalna projekcja (wybór pól)
-            if projection:
-                pipeline.append({"$project": projection})
-
-            # Uruchamiamy agregację
-            cursor = collection.aggregate(pipeline, batchSize=batch_size)
-
-        # 2. SCENARIUSZ: Zwykłe pobieranie (bez wykluczeń)
-        else:
-            cursor = collection.find(
-                filter_query or {}, 
-                projection or {}
-            ).batch_size(batch_size)
-
-        # Wspólna logika batchowania generatora
-        batch = []
-        for doc in cursor:
-            batch.append(doc)
-            if len(batch) >= batch_size:
-                yield batch
-                batch = []
-        
-        if batch:
+            last_id = batch[-1]["_id"]
             yield batch
 
     def clear_collection(self, collection_name: str) -> int:

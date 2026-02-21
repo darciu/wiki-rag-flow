@@ -8,7 +8,11 @@ class MongoDBSettings(BaseSettings):
 
     @property
     def mongodb_uri(self) -> str:
-        return f"mongodb://{self.MONGO_INITDB_ROOT_USERNAME}:{self.MONGO_INITDB_ROOT_PASSWORD}@mongodb:{self.MONGO_PORT}/?authSource=admin"  # log as admin
+        return f"mongodb://{self.MONGO_INITDB_ROOT_USERNAME}:{self.MONGO_INITDB_ROOT_PASSWORD}@mongodb:{self.MONGO_PORT}/?authSource=admin"
+    
+    @property
+    def mongodb_local_uri(self) -> str:
+        return f"mongodb://{self.MONGO_INITDB_ROOT_USERNAME}:{self.MONGO_INITDB_ROOT_PASSWORD}@localhost:{self.MONGO_PORT}/?authSource=admin"
 
     # Load envs from .env file, get only relevant variables, variables are case sensitive
     model_config = SettingsConfigDict(

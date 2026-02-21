@@ -7,6 +7,7 @@ import os
 import math
 from tqdm import tqdm
 
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -114,16 +115,14 @@ def fetch_wiki_clean_sections(text):
         k: v.replace('\xa0k', '').strip() for k, v in final_dict.items() 
         if k not in ignored and v.strip()
     }
-    # usunąć \xa0k z tekstów (wcześniej to &nbsp; przed wikiparserem)
+    
     return cleaned_dict
 
 
-def process_batch(batch, batch_idx, expected_total_batches, time_start, mongodb_client, weaviate_client):
+def process_batch(batch, batch_idx, expected_total_batches, time_start, mongodb_client, weaviate_client, nlp_toolkit):
 
     logger.info(f'Worker\'s PID: {os.getpid()}')
-    logger.info(f'Start new batch: {batch_idx}\n{get_progess_bar(batch_idx,expected_total_batches,time_start)}')
-    # if os.getppid() == 1:
-    #     os._exit(1)
+    logger.info(f'Start new unprocessed batch of full size {len(batch)} : {batch_idx}\n{get_progess_bar(batch_idx,expected_total_batches,time_start)}')
     weaviate_batch = []
     mongodb_batch = []
     batch_for_short = {}
@@ -178,12 +177,12 @@ def process_batch(batch, batch_idx, expected_total_batches, time_start, mongodb_
                 long_texts_to_process.append(text)
                 long_metadata.append((source_id, positional_id))
 
+    del batch_for_long
+
         
     prefixes = [text.split('|||', 1)[0] for text in long_texts_to_process]
     postfixes = [text.split('|||', 1)[1] for text in long_texts_to_process]
     
-
-    nlp_toolkit = RemoteNLPClient()
 
     chunked_texts = nlp_toolkit.chunk_texts(postfixes, max_tokens=450)
 
@@ -209,6 +208,8 @@ def process_batch(batch, batch_idx, expected_total_batches, time_start, mongodb_
         else:
             merged_source.update(batch_for_short[source_id])
         merged_all[source_id] = merged_source
+    
+    del batch_for_short
 
 
 
@@ -231,11 +232,19 @@ def process_batch(batch, batch_idx, expected_total_batches, time_start, mongodb_
                 weaviate_batch.append(chunk_struct)
                 cnt +=1
 
-    weaviate_client.bulk_upsert(weaviate_batch)
-    logger.info(f'Batch of size {len(weaviate_batch)} has bea upserted into Weaviate database')
-    mongodb_client.bulk_upsert('wiki_plain_articles', mongodb_batch)
-    logger.info(f'Batch of size {len(mongodb_batch)} has bea upserted into MongoDB database')
+    del common_structure_batch
 
+    weaviate_client.bulk_upsert(weaviate_batch)
+    logger.info(f'Batch of size {len(weaviate_batch)} has been upserted into Weaviate database')
+    del weaviate_batch
+
+    mongodb_client.bulk_upsert('wiki_plain_articles', mongodb_batch)
+    processed_ids = [doc["_id"] for doc in mongodb_batch]  # albo z oryginalnego batcha, ale tylko tych faktycznie zapisanych
+    mongodb_client.mark_processed("wikipedia", processed_ids)
+    logger.info(f'Batch of size {len(mongodb_batch)} has been upserted into MongoDB database')
+    del mongodb_batch
+    time.sleep(1)
+    
 
 
 def get_progess_bar(n: int, total_n: int, time_start: float, unit: str = 'it') -> str:
@@ -256,21 +265,3 @@ def get_optimal_workers(percentage=0.6):
     
     return min(7, max(1, workers))
 
-import requests
-class RemoteNLPClient:
-    def __init__(self, api_url="http://host.docker.internal:8007"):
-        self.api_url = api_url
-
-    def extract_ner_entities(self, texts: list[str]):
-        resp = requests.post(f"{self.api_url}/ner", json={"texts": texts})
-        resp.raise_for_status()
-        return resp.json()
-
-    def chunk_texts(self, texts: list[str], max_tokens: int):
-        
-        resp = requests.post(
-            f"{self.api_url}/chunk", 
-            json={"texts": texts, "max_tokens": max_tokens}
-        )
-        resp.raise_for_status()
-        return resp.json()
