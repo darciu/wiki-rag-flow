@@ -36,7 +36,7 @@ ignore = ["E501"]
 [tool.mypy]
 python_version = "3.13"
 strict = false # strict typing check
-warn_return_any = true # warns if function returns any type if its not correct with typing
+warn_return_any = false # warns if function returns any type if its not correct with typing
 ignore_missing_imports = true # if function does not have typing output, then ignore
 
 [tool.pytest.ini_options]

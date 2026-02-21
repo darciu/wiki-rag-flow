@@ -33,7 +33,7 @@ def fetch_wiki_categories(wikicode: Wikicode) -> list:
 
 def fetch_wiki_infobox_data(wikicode: Wikicode) -> dict:
 
-    infobox_data = {
+    infobox_data: dict[str, str | None] = {
         "imię i nazwisko": None,
         "imię": None,
         "data urodzenia": None,
@@ -74,7 +74,10 @@ def normalize_key(key: str) -> str:
 def fetch_wiki_clean_sections(text: str) -> dict:
 
     match = re.search(r"<text[^>]*>(.*?)</text>", text, re.DOTALL)
-    wikitext = html.unescape(match.group(1))
+    if match:
+        wikitext = html.unescape(match.group(1))
+    else:
+        wikitext = ""
     wikicode = mwparserfromhell.parse(wikitext)
     templates = wikicode.filter_templates()
 
@@ -105,7 +108,7 @@ def fetch_wiki_clean_sections(text: str) -> dict:
     # divide text into sections that starts with heading
     headings = wikicode.filter_headings()
 
-    sections = {"Wstęp": []}
+    sections: dict[str, list] = {"Wstęp": []}
     current_key = "Wstęp"
 
     for node in wikicode.nodes:
@@ -155,8 +158,8 @@ def process_batch(
     )
     weaviate_batch = []
     mongodb_batch = []
-    batch_for_short = {}
-    batch_for_long = {}
+    batch_for_short: dict = {}
+    batch_for_long: dict = {}
     common_structure_batch = {}
     for wiki_page in batch:
         if any(
@@ -231,10 +234,10 @@ def process_batch(
 
     title_chunk = [
         [f"{p}|||{text}" for text in chunks]
-        for p, chunks in zip(prefixes, chunked_texts, str, strict=True)
+        for p, chunks in zip(prefixes, chunked_texts, strict=True)
     ]
 
-    processed_longs = {}
+    processed_longs: dict = {}
 
     for (source_id, positional_id), chunks in zip(
         long_metadata, title_chunk, strict=True

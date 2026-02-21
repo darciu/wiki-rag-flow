@@ -264,7 +264,11 @@ class StanzaNERClient:
 
             doc = ner_model(text)
 
-            mapping = {"persName": [], "placeName": [], "orgName": []}
+            mapping: dict[str, list[dict]] = {
+                "persName": [],
+                "placeName": [],
+                "orgName": [],
+            }
 
             for ent in doc.entities:
                 if ent.type in mapping:

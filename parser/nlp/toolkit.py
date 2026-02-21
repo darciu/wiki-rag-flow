@@ -24,6 +24,8 @@ class NLPToolkit(NLP):
     """
 
     ner_client: HerbertNERClient | StanzaNERClient
+    keywords_client: KeyBERTKeywordsClient | VLT5KeywordsClient
+    chunking_client: LangchainSplitterClient | StatisticalChunkerClient
 
     def __init__(
         self,
