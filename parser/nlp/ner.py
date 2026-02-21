@@ -1,13 +1,17 @@
+import logging
 import re
 from pathlib import Path
 from statistics import mean
-from typing import Dict, List
-
 
 import stanza  # type: ignore
 from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
 
 from parser.entities import NEREntities
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 class HerbertNERClient:
@@ -19,18 +23,20 @@ class HerbertNERClient:
 
     def _get_pipeline(self):
         if HerbertNERClient._pipeline is None:
-
             required_files = [
-                "config.json", 
-                "model.safetensors", 
-                "tokenizer.json", 
+                "config.json",
+                "model.safetensors",
+                "tokenizer.json",
                 "tokenizer_config.json",
             ]
-        
-            complete_dir_and_files = self.model_dir.exists() and all((self.model_dir / f).exists() for f in required_files)
+
+            complete_dir_and_files = self.model_dir.exists() and all(
+                (self.model_dir / f).exists() for f in required_files
+            )
             if not complete_dir_and_files:
-                
-                print(f"Load model and tokenizer from remote: {self.model_checkpoint}...")
+                logger.info(
+                    f"Load model and tokenizer from remote: {self.model_checkpoint}..."
+                )
 
                 if self.model_dir.exists():
                     for item in sorted(self.model_dir.rglob("*"), reverse=True):
@@ -44,35 +50,39 @@ class HerbertNERClient:
                     )
                     tokenizer.save_pretrained(self.model_dir)
                     model.save_pretrained(self.model_dir)
-                    
+
                     HerbertNERClient._pipeline = pipeline(
                         "ner", model=model, tokenizer=tokenizer
                     )
             else:
-                print(f"Loading model from local directory: {self.model_dir}...")
+                logger.info(f"Loading model from local directory: {self.model_dir}...")
                 try:
                     tokenizer = AutoTokenizer.from_pretrained(self.model_dir)
-                    model = AutoModelForTokenClassification.from_pretrained(self.model_dir)
+                    model = AutoModelForTokenClassification.from_pretrained(
+                        self.model_dir
+                    )
 
                     HerbertNERClient._pipeline = pipeline(
                         "ner", model=model, tokenizer=tokenizer
                     )
-                except:
-                    print(f"Error while loading: {e}. Try delete local directory manually: {self.model_dir}")
+                except Exception as e:
+                    logger.info(
+                        f"Error while loading: {e}. Try delete local directory manually: {self.model_dir}"
+                    )
                     raise
 
         return HerbertNERClient._pipeline
 
-    def extract_raw_entities(self, texts: List[str]) -> List[List[dict]]:
+    def extract_raw_entities(self, texts: list[str]) -> list[list[dict]]:
         """Extract all entities from given list of texts using batch processing"""
 
         ner_pipeline = self._get_pipeline()
         return ner_pipeline(texts)
 
-    def group_entities(self, ner_output: List[dict]) -> dict:
+    def group_entities(self, ner_output: list[dict]) -> dict:
         """Group NERs withing three categories: PER, LOC, ORG"""
 
-        entities: Dict[str, List[dict]] = {"PER": [], "LOC": [], "ORG": []}
+        entities: dict[str, list[dict]] = {"PER": [], "LOC": [], "ORG": []}
 
         current_entity: list[str] = []
         current_type = None
@@ -137,7 +147,7 @@ class HerbertNERClient:
 
         return result.strip()
 
-    def parse_entities(self, texts: List[str]) -> List[NEREntities]:
+    def parse_entities(self, texts: list[str]) -> list[NEREntities]:
         """Combined logic of extracting, cleaning and parsing NER entities"""
 
         batch_raw_entities = self.extract_raw_entities(texts)
@@ -145,7 +155,6 @@ class HerbertNERClient:
 
         for raw_entities in batch_raw_entities:
             grouped_entities = self.group_entities(raw_entities)
-
 
             personalia = [
                 {
@@ -179,34 +188,37 @@ class StanzaNERClient:
     def __init__(self):
         self.model_dir = Path("models") / "stanza"
 
-    
     def _get_model(self):
         if self._nlp_stanza is None:
             required_files = [
                 "resources.json",
             ]
-        
-            complete_dir_and_files = self.model_dir.exists() and all((self.model_dir / f).exists() for f in required_files)
+
+            complete_dir_and_files = self.model_dir.exists() and all(
+                (self.model_dir / f).exists() for f in required_files
+            )
             if not complete_dir_and_files:
                 if self.model_dir.exists():
                     for item in sorted(self.model_dir.rglob("*"), reverse=True):
                         item.unlink() if item.is_file() else item.rmdir()
                 else:
-                    print(f"Model is downloaded from external resource to location {self.model_dir}")
+                    logger.info(
+                        f"Model is downloaded from external resource to location {self.model_dir}"
+                    )
                     stanza.download("pl", model_dir=str(self.model_dir))
             else:
-                print(f"Model already exists in location: {self.model_dir}")
+                logger.info(f"Model already exists in location: {self.model_dir}")
 
             StanzaNERClient._nlp_stanza = stanza.Pipeline(
                 "pl",
                 processors="tokenize,ner",
                 dir=str(self.model_dir),
             )
-            print("Model has been loaded")
+            logger.info("Model has been loaded")
 
         return StanzaNERClient._nlp_stanza
 
-    def extract_raw_entities(self, texts: List[str]):
+    def extract_raw_entities(self, texts: list[str]):
         """Extract all entities from given text"""
 
         ner_model = self._get_model()
@@ -237,7 +249,7 @@ class StanzaNERClient:
 
         return findings
 
-    def parse_entities(self, texts: List[str]) -> List[NEREntities]:
+    def parse_entities(self, texts: list[str]) -> list[NEREntities]:
         """
         Combined logic of extracting, cleaning and parsing NER entities.
         Stanza in fact does not have batch processing, so process is iterating as single
@@ -247,29 +259,22 @@ class StanzaNERClient:
         results = []
         for text in texts:
             if not text or not text.strip():
-
                 results.append(NEREntities([], [], []))
                 continue
-                
+
             doc = ner_model(text)
-            
-            mapping = {
-                "persName": [],
-                "placeName": [],
-                "orgName": []
-            }
-            
+
+            mapping = {"persName": [], "placeName": [], "orgName": []}
+
             for ent in doc.entities:
                 if ent.type in mapping:
-                    mapping[ent.type].append({
-                        "entity": ent.text, 
-                        "score": 1.0
-                    })
-            
-            results.append(NEREntities(
-                personalia=mapping["persName"],
-                locations=mapping["placeName"],
-                organizations=mapping["orgName"]
-            ))
-        return results
+                    mapping[ent.type].append({"entity": ent.text, "score": 1.0})
 
+            results.append(
+                NEREntities(
+                    personalia=mapping["persName"],
+                    locations=mapping["placeName"],
+                    organizations=mapping["orgName"],
+                )
+            )
+        return results

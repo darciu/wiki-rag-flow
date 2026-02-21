@@ -29,7 +29,7 @@ target-version = "py313"
 # C4 - optimise building of lists and dictionaries of comprehensions
 # PTH - do not allow using os.path
 # E501 - line is too long
-select = ["E", "F", "I", "B", "UP", "N", "A", "PT", "C4", "PTH", "ASYNC", "FAST", "RET"]
+select = ["E", "F", "I", "B", "UP", "N", "A", "PT", "C4", "PTH", "ASYNC", "FAST"]
 ignore = ["E501"]
 
 

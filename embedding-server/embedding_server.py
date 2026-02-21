@@ -1,10 +1,11 @@
+import asyncio
+import gc
+
+import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from starlette.concurrency import run_in_threadpool
-import torch
-import asyncio
-import gc
 
 MODEL_NAME = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1"
 
