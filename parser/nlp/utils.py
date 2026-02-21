@@ -154,7 +154,8 @@ def process_batch(
     time0 = time.perf_counter()
     logger.info(f"Worker's PID: {os.getpid()}")
     logger.info(
-        f"Start new unprocessed batch of full size {len(batch)} : {batch_idx}\n{get_progess_bar(batch_idx, expected_total_batches, time_start)}"
+        f"""Start new unprocessed batch of full size {len(batch)} : {batch_idx}
+        \n{get_progess_bar(batch_idx, expected_total_batches, time_start)}"""
     )
     weaviate_batch = []
     mongodb_batch = []
@@ -230,7 +231,7 @@ def process_batch(
     prefixes = [text.split("|||", 1)[0] for text in long_texts_to_process]
     postfixes = [text.split("|||", 1)[1] for text in long_texts_to_process]
 
-    chunked_texts = nlp_toolkit.chunk_texts(postfixes, max_tokens=450)
+    chunked_texts = nlp_toolkit.chunk_texts(postfixes, max_tokens=480)
 
     title_chunk = [
         [f"{p}|||{text}" for text in chunks]

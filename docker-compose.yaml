@@ -32,10 +32,10 @@ services:
     environment:
       QUERY_DEFAULTS_LIMIT: 5
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
-      AUTHENTICATION_APIKEY_ENABLED: "true"
+      AUTHENTICATION_APIKEY_ENABLED: "false"
       AUTHENTICATION_APIKEY_USERS: ${WEAVIATE_APIKEY_USER}
       AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_APIKEY_KEY}
-      CORS_ALLOW_ORIGIN: "http://localhost:3000,http://127.0.0.1:3000"
+      CORS_ALLOW_ORIGIN: "http://localhost:3000"
       CORS_ALLOW_HEADERS: "Content-Type,Authorization,X-API-KEY"
       CORS_ALLOW_METHODS: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
       PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
@@ -86,25 +86,6 @@ services:
     container_name: wikipedia_scraper
     volumes:
       - ./data/wiki_dumps:/app/data/wiki_dumps
-    env_file:
-      - .env
-    profiles: ["tools"]
-
-  parser:
-    build:
-      context: .
-      dockerfile: dockerfiles/Dockerfile_parser
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      weaviate:
-        condition: service_healthy
-    extra_hosts:
-    - "host.docker.internal:host-gateway"
-    container_name: wikipedia_parser
-    environment:
-    - PYTHONUNBUFFERED=1
-    - PYTHONFAULTHANDLER=1
     env_file:
       - .env
     profiles: ["tools"]

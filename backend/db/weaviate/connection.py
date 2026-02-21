@@ -1,3 +1,4 @@
+from types import TracebackType
 from typing import Any
 
 import requests
@@ -34,7 +35,12 @@ class WeaviateManager:
         """
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """
         Context manager exit point. Ensures the client is closed.
         """
@@ -234,3 +240,9 @@ class WeaviateManager:
             print(f"First error: {collection.batch.failed_objects[0]}")
         else:
             print(f"Successfully loaded batch of {len(data_items)} items.")
+
+    def clear_collection(self, collection_name: str) -> None:
+        """
+        Remove collection definition with all the data inside
+        """
+        self.client.collections.delete(collection_name)
