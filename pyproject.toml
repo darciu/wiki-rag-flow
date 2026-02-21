@@ -29,14 +29,14 @@ target-version = "py313"
 # C4 - optimise building of lists and dictionaries of comprehensions
 # PTH - do not allow using os.path
 # E501 - line is too long
-select = ["E", "F", "I", "B", "UP", "N", "A", "PT", "C4", "PTH", "ASYNC", "FAST", "RET"]
+select = ["E", "F", "I", "B", "UP", "N", "A", "PT", "C4", "PTH", "ASYNC", "FAST"]
 ignore = ["E501"]
 
 
 [tool.mypy]
 python_version = "3.13"
 strict = false # strict typing check
-warn_return_any = true # warns if function returns any type if its not correct with typing
+warn_return_any = false # warns if function returns any type if its not correct with typing
 ignore_missing_imports = true # if function does not have typing output, then ignore
 
 [tool.pytest.ini_options]

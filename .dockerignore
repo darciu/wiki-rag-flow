@@ -1,9 +1,12 @@
-backend/db/mongodb/data
-data
-
+**/data/
+**/models/
 **/.git
 **/__pycache__
 **/*.pyc
-.venv
+**/venv/
+**/.venv/
 .env
 *.ipynb
+.pytest_cache
+*.pid
+*.log

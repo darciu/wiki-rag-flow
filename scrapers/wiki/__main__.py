@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 from backend.db.mongodb.connection import MongoManager
-from scrapers.config import WikiScraperSettings
+from config import MongoDBSettings, ScraperSettings
 from scrapers.wiki.async_func import run_scraper
 from scrapers.wiki.utils import (
     fetch_dumpstatus,
@@ -20,16 +20,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-wiki_scraper_settings = WikiScraperSettings()
-WIKI_DOWNLOAD_PATH = wiki_scraper_settings.WIKI_DOWNLOAD_PATH
-MONGODB_URI = wiki_scraper_settings.mongodb_uri
+mongodb_settings = MongoDBSettings()
+scraper_settings = ScraperSettings()
+
+MONGODB_URI = mongodb_settings.mongodb_uri
 mongodb_client = MongoManager(MONGODB_URI, "scraper_db")
-RSS_URL = wiki_scraper_settings.RSS_URL
+
+WIKI_DOWNLOAD_PATH = scraper_settings.WIKI_DOWNLOAD_PATH
+RSS_URL = scraper_settings.RSS_URL
 
 if __name__ == "__main__":
-    logger.info("WIKI SCRAPER")
+    logger.info("SCRAPER WIKI")
     if not mongodb_client.is_healthy():
-        logger.critical("Could not establish connection with MongoDB")
+        logger.critical("SCRAPER WIKI Could not establish connection with MongoDB")
         exit(1)
     Path(WIKI_DOWNLOAD_PATH).mkdir(parents=True, exist_ok=True)
     dumpstatus_url = get_latest_dumpstatus_url(RSS_URL)
