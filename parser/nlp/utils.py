@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import html
 import logging
 import os
@@ -297,10 +299,9 @@ def process_batch(
     del mongodb_batch
     time4 = time.perf_counter()
 
-    logger.info(f"""Time of\nbatch processing: {time1 - time0:.2f}
-                \nchunking: {time2 - time1:.2f}
-                \nMongoDB save: {time4 - time3:.2f}
-                \nWeaviate save (embedding included): {time3 - time2:.2f}""")
+    logger.info(
+        f"""Time of\nbatch processing: {time1 - time0:.2f}\nchunking: {time2 - time1:.2f}\nMongoDB save: {time4 - time3:.2f}\nWeaviate save (embedding included): {time3 - time2:.2f}"""
+    )
     logger.info("\n\n")
 
 
