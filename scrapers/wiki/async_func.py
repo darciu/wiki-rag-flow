@@ -27,7 +27,9 @@ async def download_file(
     file_full_path = Path(download_path) / filename
     max_retries = 3
 
-    if anyio.Path(file_full_path).exists():
+    file_full_path = Path(download_path) / filename
+
+    if await anyio.Path(file_full_path).exists():
         logger.info(f"File {filename} already exists")
         return
 
@@ -68,6 +70,7 @@ async def download_file(
                         logger.info(f"File {filename} has been deleted")
                     else:
                         logger.info(f"File {filename} has passed md5 check")
+                        return
             except Exception as e:
                 logger.exception(f"Following exception has occured: {e}")
 
