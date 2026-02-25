@@ -8,11 +8,13 @@ from parser.nlp.ner import (
     HerbertNERClient,
     StanzaNERClient,
 )
+from parser.nlp.ranking import CrossEncoderMSMarcoClient, UnicampMiniLMMultiClient
 from parser.nlp.spacy import SpacyUtils
 
 NERModelName = Literal["herbert", "stanza"]
 KeywordsModelName = Literal["vlt5", "keybert"]
 ChunkingModelName = Literal["langchain", "statistical_chunker"]
+RankingModelName = Literal["ms_marco","ms_marco_multilangual"]
 
 
 class NLPToolkit(NLP):
@@ -26,12 +28,14 @@ class NLPToolkit(NLP):
     ner_client: HerbertNERClient | StanzaNERClient
     keywords_client: KeyBERTKeywordsClient | VLT5KeywordsClient
     chunking_client: LangchainSplitterClient | StatisticalChunkerClient
+    ranking_client: CrossEncoderMSMarcoClient | UnicampMiniLMMultiClient
 
     def __init__(
         self,
         ner_model_name: NERModelName = "herbert",
         keywords_model_name: KeywordsModelName = "keybert",
         chunking_model_name: ChunkingModelName = "langchain",
+        ranking_model_name: RankingModelName = "ms_marco_multilangual",
     ):
         if ner_model_name == "herbert":
             self.ner_client = HerbertNERClient()
@@ -47,6 +51,11 @@ class NLPToolkit(NLP):
             self.chunking_client = LangchainSplitterClient()
         elif chunking_model_name == "statistical_chunker":
             self.chunking_client = StatisticalChunkerClient()
+
+        if ranking_model_name == "ms_marco":
+            self.ranking_client = CrossEncoderMSMarcoClient()
+        elif chunking_model_name == "ms_marco_multilangual":
+            self.ranking_client = UnicampMiniLMMultiClient()
 
         self._spacy_utils = SpacyUtils()
 
@@ -82,3 +91,17 @@ class NLPToolkit(NLP):
         """Partition input texts into semantic or logical chunks"""
 
         return self.chunking_client.chunk_texts(texts, max_tokens)
+    
+    def rank(self, query: str, texts: list[str]) -> list[float]:
+        """
+        Ranks text candidates against a query using a cross-encoder model.
+
+        Args:
+            query: The search query string.
+            texts: A list of document strings to be scored.
+
+        Returns:
+            A list of relevance scores (higher is better) for each text.
+        """
+
+        return self.ranking_client.rank(query, texts)
