@@ -54,7 +54,7 @@ class NLPToolkit(NLP):
 
         if ranking_model_name == "ms_marco":
             self.ranking_client = CrossEncoderMSMarcoClient()
-        elif chunking_model_name == "ms_marco_multilangual":
+        elif ranking_model_name == "ms_marco_multilangual":
             self.ranking_client = UnicampMiniLMMultiClient()
 
         self._spacy_utils = SpacyUtils()

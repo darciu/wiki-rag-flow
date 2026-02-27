@@ -249,69 +249,62 @@ class WeaviateManager:
 
     
 
-    # ... [Poprzedni kod klasy] ...
+    def single_wikichunk_hybrid_fetch(self, query_text, query_vector, weaviate_limit, alpha):
 
-    def search_wiki(
-        self,
-        queries: list[str],
-        limit: int = 5,
-        alpha: float = 0.5,
-        fetch_limit: int = 50,
-        do_rerank: bool = False
-    ) -> list[dict[str, Any]]:
-        """
-        Przeszukuje kolekcję WikiChunk dla listy zapytań tekstowych.
-        
-        Parametry:
-        - queries: Lista zapytań od użytkownika.
-        - limit: Ile finalnie wyników chcemy zwrócić na jedno zapytanie (np. do LLM).
-        - alpha: Waga Hybrid Search. 0.0 = tylko BM25, 1.0 = tylko wektory. 0.5 to równa waga.
-        - fetch_limit: Ile wyników pobrać z Weaviate do ewentualnego rerankingu (Top-K).
-        - do_rerank: Flaga określająca czy włączyć reranking (wymaga zewnętrznego serwisu).
-        """
-        collection = self.create_wiki_chunk_collection()
-        
-        # 1. Wektoryzacja wszystkich zapytań jednym callem (optymalizacja)
-        vectors = self.embed_batch_natively(queries)
-        
-        all_results = []
-
-        for query_text, query_vector in zip(queries, vectors, strict=True):
-            
-            # 2. Wyszukiwanie Hybrydowe w Weaviate
-            # Pobieramy więcej wyników (fetch_limit) jeśli planujemy reranking
-            weaviate_limit = fetch_limit if do_rerank else limit
-            
-            response = collection.query.hybrid(
+        collection_name = "WikiChunk"
+        collection = self.client.collections.get(collection_name)
+        response = collection.query.hybrid(
                 query=query_text,
                 vector=query_vector,
                 limit=weaviate_limit,
                 alpha=alpha,
                 return_properties=["source_id", "source_title", "chunk_id", "chunk_text"],
-                return_metadata=wq.MetadataQuery(score=True) # Pobieramy hybrydowy score
+                return_metadata=wq.MetadataQuery(score=True) 
             )
-            
-            query_results = []
-            for obj in response.objects:
-                query_results.append({
-                    "source_id": obj.properties["source_id"],
-                    "source_title": obj.properties["source_title"],
-                    "chunk_id": obj.properties["chunk_id"],
-                    "chunk_text": obj.properties["chunk_text"],
-                    "score": obj.metadata.score
-                })
-
-            # 3. Miejsce na Reranking (opcjonalnie)
-            if do_rerank:
-                # Tutaj wywołałbyś swój model rerankujący (np. BGE-Reranker przez API lub lokalnie)
-                # query_results = self.rerank_results(query_text, query_results)
-                
-                # Ucinamy do finalnego limitu po przetasowaniu
-                query_results = query_results[:limit]
-            
-            all_results.append({
-                "query": query_text,
-                "hits": query_results
+        
+        query_results = []
+        for obj in response.objects:
+            query_results.append({
+                "source_id": obj.properties["source_id"],
+                "source_title": obj.properties["source_title"],
+                "chunk_id": obj.properties["chunk_id"],
+                "chunk_text": obj.properties["chunk_text"],
+                "score": obj.metadata.score
             })
 
-        return all_results
+        return query_results
+    
+    def wikichunk_combined_filter(self, grouped_source_chunk_id):
+
+        filters = []
+        for s_id, c_ids in grouped_source_chunk_id.items():
+            f = wq.Filter.by_property("source_id").equal(s_id) & wq.Filter.by_property("chunk_id").contains_any(c_ids)
+            filters.append(f)
+
+        combined_filter = wq.Filter.any_of(filters) if len(filters) > 1 else filters[0]
+
+        return combined_filter
+    
+    def batch_wikichunk_fetch(self, grouped_source_chunk_id):
+
+        collection_name = "WikiChunk"
+        collection = self.client.collections.get(collection_name)
+        combined_filter = self.wikichunk_combined_filter(grouped_source_chunk_id)
+
+        response = collection.query.fetch_objects(
+            filters=combined_filter,
+            limit=len(grouped_source_chunk_id) +1,
+            return_properties=["source_id", "source_title", "chunk_id", "chunk_text"]
+        )
+        fetched_chunks = []
+        for obj in response.objects:
+            fetched_chunks.append({
+                "source_id": obj.properties["source_id"],
+                "source_title": obj.properties.get("source_title", ""),
+                "chunk_id": obj.properties["chunk_id"],
+                "chunk_text": obj.properties["chunk_text"],
+                "score": 0.0, 
+                "rank_score": -999.0 
+            })
+
+        return fetched_chunks

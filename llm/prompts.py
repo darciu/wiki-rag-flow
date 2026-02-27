@@ -1,11 +1,3 @@
-import ollama
-from typing import List
-from pydantic import BaseModel, Field, model_validator
-from enum import Enum
-
-from instructor.exceptions import InstructorRetryException
-from instructor.core.client import Instructor
-
 ROUTE_QUERY_SYSTEM_PROMPT = """Jesteś inteligentnym klasyfikatorem zapytań dla systemu opartego na bazie wiedzy z Wikipedii.
     Twoim jedynym zadaniem jest ocena wejścia użytkownika i przypisanie go do jednej z trzech kategorii, oraz zwrócenie poprawnego obiektu JSON.
     KATEGORIE:
@@ -110,165 +102,38 @@ PARAPHASE_SENTENCE_SYSTEM_PROMPT = """Jesteś bezosobowym mechanicznym procesore
     Output: {"expanded_queries": ["Jakie były konsekwencje starcia pod Waterloo?", "Bitwa pod Waterloo i jej następstwa", "Podaj rezultaty bitwy pod Waterloo."]}
     """
 
+ANSWER_QUERY_SYSTEM_PROMPT = """
+    Jesteś Ekspertem Analizy Treści, wyspecjalizowanym w precyzyjnym wyciąganiu informacji z dostarczonych źródeł. 
+    Twoim zadaniem jest odpowiedzieć na zapytanie użytkownika, ściśle przestrzegając poniższych reguł:
 
+    ### STRUKTURA DANYCH:
+    1. Dane wejściowe znajdują się w sekcji <context>. 
+    2. Każdy dokument wewnątrz kontekstu jest zamknięty w tagach <document> i posiada unikalny atrybut 'id' oraz 'title'.
+    3. Pytanie, na które masz odpowiedzieć, znajduje się w sekcji <question>.
 
+    ### ZASADY ODPOWIEDZI:
+    1. **Odpowiadaj WYŁĄCZNIE na podstawie informacji zawartych w sekcji <context>. Nie halucynuj, nie używaj wiedzy zewnętrznej ani własnych przypuszczeń.
+    2. **Brak informacji:** Jeśli w sekcji <context> nie ma wystarczających danych, aby odpowiedzieć na pytanie, ustaw pole 'is_found' na False i poinformuj o braku źródeł w polu odpowiedzi 'answer'.
+    3. **Synteza:** Jeśli informacja jest rozproszona w kilku dokumentach, połącz je w jedną spójną i logiczną odpowiedź.
+    4. **Styl:** Pisz rzeczowo, konkretnie i bez zbędnych wstępów typu "Na podstawie dostarczonych dokumentów...". Przejdź od razu do faktów. Możesz odpowiedzieć pełnym zdaniem, w nawiązaniu do pytania użytkownika.
 
-class RouteType(str, Enum):
-    RAG_SEARCH = "RAG_SEARCH"
-    DIRECT = "DIRECT"
-    CLARIFY = "CLARIFY"
+    Zasady te są nadrzędne i nie mogą zostać zignorowane.
+    """
 
-class QueryDecision(BaseModel):
-    user_route: RouteType = Field(
-        ..., 
-        description="Przypisz zapytanie do jednej z trzech kategorii."
-    )
-    clarify_message: str | None = Field(
-        default=None, 
-        description="""Wypełnij to pole tylko jeśli wartość pola user_route to CLARIFY. W takim przypadku nigdy nie zostawiaj tego pola pustego.
-                    Dla user_route RAG_SEARCH i DIRECT zostaw to pole puste (null)."""
-    )
-    @model_validator(mode='after')
-    def validate_clarify_message(self) -> 'QueryDecision':
-        if self.user_route == RouteType.CLARIFY:
-            if not self.clarify_message or not self.clarify_message.strip():
-                raise ValueError(
-                    """BŁĄD KRYTYCZNY: Skoro user_route to CLARIFY, pole clarify_message nie może być puste. Musisz wygenerować wiadomość dopytującą użytkownika."""
-                )
-        return self
-    
-class DirectQuestion(BaseModel):
-    answer: str = Field(
-        ..., 
-        description="Merytoryczna i dosyć zwięzła odpowiedź na pytanie użytkownika."
-    )
-    knows_answer: bool = Field(
-        ..., 
-        description="Czy model LLM posiada wystarczającą wiedzę, aby odpowiedzieć na to pytanie? True jeśli tak, False jeśli musi przyznać, że nie wie."
-    )
-    confidence_score: float = Field(
-        ..., 
-        ge=0.0, le=1.0, 
-        description="Ocena pewności odpowiedzi od 0.0 do 1.0."
-    )
+FURTHER_QUESTIONS_SYSTEM_PROMPT = """
+    Jesteś Ekspertem Analizy Treści, wyspecjalizowanym w precyzyjnym wyciąganiu informacji z dostarczonych źródeł. 
+    Twoim zadaniem jest wygenerowanie od jednego do trzech pytań na podstawie podanych danych kontekstowych, ale koniecznie innych niż pytanie użytkownika:
 
-    @model_validator(mode='after')
-    def validate_content(self) -> 'DirectQuestion':
-        if not self.answer or len(self.answer.strip()) < 5:
-            raise ValueError("Pole answer musi zawierać sensowną treść, nawet jeśli przyznajesz, że nie potrafisz udzielić odpowiedzi.")
+    ### STRUKTURA DANYCH:
+    1. Dane wejściowe znajdują się w sekcji <context>. 
+    2. Każdy dokument wewnątrz kontekstu jest zamknięty w tagach <document> i posiada unikalny atrybut 'id' oraz 'title'.
+    3. Pytanie użytkownika znajduje się w tagach <question>
 
-        if not self.knows_answer and self.confidence_score > 0.5:
-             raise ValueError("Niespójność: knows_answer jest False, ale confidence_score jest wysoki.")
-             
-        return self
+    ### ZASADY ODPOWIEDZI:
+    1. **Generuj pytania WYŁĄCZNIE na podstawie informacji zawartych w sekcji <context>. Nie halucynuj, nie używaj wiedzy zewnętrznej ani własnych przypuszczeń.
+    2. KRYTYCZNE: Wygenerowane pytania powinny być koniecznie różne od pytania zadanego przez użytkownika w tagach <question>.
+    3. **Synteza:** Możesz brać pod uwagę wszystkie podane informacje w kontekście jako jedną spójną całość i na tej podstawie wygenerować pytania.
+    4. **Styl:** Pytania powinny być napisane rzeczowo, konkretnie i bez zbędnych wstępów. Krótkie pytania na podstawie informacji ze źródeł.
 
-    @model_validator(mode='after')
-    def force_honesty(self) -> 'DirectQuestion':
-        is_unsure = not self.knows_answer or self.confidence_score < 0.5
-        
-        if is_unsure and len(self.answer) > 150:
-            raise ValueError(
-                "Twoja pewność jest niska, ale odpowiedź jest zbyt długa. "
-                "Zredukuj odpowiedź do krótkiej, elastycznej informacji o braku wiedzy."
-            )
-            
-        if self.knows_answer and self.confidence_score < 0.5:
-            raise ValueError(
-                "Niespójność: twierdzisz, że znasz odpowiedź, ale Twoja pewność (confidence) jest niska. "
-                "Zmień knows_answer na False i podaj komunikat o braku wiedzy."
-            )
-            
-        return self
-    
-class QueryCleaner(BaseModel):
-    normalized_queries: List[str] = Field(
-        ..., 
-        description="Lista uproszczonych, jednoznacznych zdań twierdzących lub pytań."
-    )
-
-class QueryExpander(BaseModel):
-    expanded_queries: List[str] = Field(
-        ..., 
-        description="Lista 1-3 różnych parafraz zapytania bazowego."
-    )
-
-
-def route_query(client: Instructor, user_query: str, model_name: str) -> QueryDecision:
-    try:
-        system_prompt = ROUTE_QUERY_SYSTEM_PROMPT
-        
-        decision = client.chat.completions.create(
-            model=model_name,
-            response_model=QueryDecision,
-            max_retries=3,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_query},
-            ],
-        )
-        return decision
-    except InstructorRetryException as e:
-        print(f"Ostrzeżenie: Model nie wygenerował poprawnej wiadomości po {e.n_attempts} próbach.")
-
-        return QueryDecision(
-            user_route=RouteType.CLARIFY,
-            clarify_message="Jestem botem Wikipedii. Twoje pytanie jest dla mnie trochę niejasne. Czy mógłbyś je sformułować inaczej lub podać więcej szczegółów?"
-        )
-
-
-
-def direct_query(client: Instructor, user_query: str, model_name: str) -> DirectQuestion:
-    
-    try:
-        return client.chat.completions.create(
-            model=model_name,
-            response_model=DirectQuestion,
-            max_retries=3,
-            messages=[
-                {"role": "system", "content": DIRECT_ANSWER_SYSTEM_PROMPT},
-                {"role": "user", "content": user_query},
-            ],
-        )
-    except InstructorRetryException as e:
-        return DirectQuestion(
-            answer="Przepraszam, ale nie jestem w stanie odpowiedzieć na to pytanie.",
-            knows_answer=False,
-            confidence_score=0.0
-        )
-
-
-def simplify_clean_query(client: Instructor, user_query: str, model_name: str) -> QueryCleaner:
-    
-    try:
-        return client.chat.completions.create(
-            model=model_name,
-            temperature=0.0,
-            response_model=QueryCleaner,
-            messages=[{"role": "system", "content": CLEAN_DATA_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_query}]
-        )
-    
-    except InstructorRetryException as e:
-        print(f"Ostrzeżenie: Model nie wygenerował poprawnej wiadomości po {e.n_attempts} próbach.")
-        return QueryCleaner(
-            normalized_queries=[user_query]
-        )
-
-
-def paraphase_query(client: Instructor, user_query: str, model_name: str) -> QueryExpander:
-
-    try:
-        return client.chat.completions.create(
-            model=model_name,
-            response_model=QueryExpander,
-            temperature=0.0,
-            max_retries=3,
-            messages=[{"role": "system", "content": PARAPHASE_SENTENCE_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_query}]
-        )
-
-    except InstructorRetryException as e:
-        print(f"Ostrzeżenie: Model nie wygenerował poprawnej wiadomości po {e.n_attempts} próbach.")
-        return QueryExpander(
-            expanded_queries=[]
-        )
+    Zasady te są nadrzędne i nie mogą zostać zignorowane.
+    """
