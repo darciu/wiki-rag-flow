@@ -5,8 +5,13 @@ from enum import Enum
 from instructor.exceptions import InstructorRetryException
 from instructor.core.client import Instructor
 
-from prompts import ROUTE_QUERY_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, CLEAN_DATA_SYSTEM_PROMPT, PARAPHASE_SENTENCE_SYSTEM_PROMPT, FURTHER_QUESTIONS_SYSTEM_PROMPT, ANSWER_QUERY_SYSTEM_PROMPT
+from prompts import ROUTE_QUERY_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, CLEAN_DATA_SYSTEM_PROMPT, PARAPHASE_SENTENCE_SYSTEM_PROMPT, FURTHER_QUESTIONS_SYSTEM_PROMPT, RAG_QUERY_SYSTEM_PROMPT
+import logging
 
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 class RouteType(str, Enum):
     RAG_SEARCH = "RAG_SEARCH"
@@ -117,7 +122,7 @@ def route_query(client: Instructor, user_query: str, model_name: str) -> QueryDe
         )
         return decision
     except InstructorRetryException as e:
-        print(f"Ostrzeżenie: Model nie wygenerował poprawnej wiadomości po {e.n_attempts} próbach.")
+        logger.info(f"Warning! Model could not generate reply after {e.n_attempts} retires.")
 
         return QueryDecision(
             user_route=RouteType.CLARIFY,
@@ -158,7 +163,7 @@ def simplify_clean_query(client: Instructor, user_query: str, model_name: str) -
         )
     
     except InstructorRetryException as e:
-        print(f"Ostrzeżenie: Model nie wygenerował poprawnej wiadomości po {e.n_attempts} próbach.")
+        logger.info(f"Warning! Model could not generate reply after {e.n_attempts} retires.")
         return QueryCleaner(
             normalized_queries=[user_query]
         )
@@ -177,15 +182,15 @@ def paraphase_query(client: Instructor, user_query: str, model_name: str) -> Que
         )
 
     except InstructorRetryException as e:
-        print(f"Ostrzeżenie: Model nie wygenerował poprawnej wiadomości po {e.n_attempts} próbach.")
+        logger.info(f"Warning! Model could not generate reply after {e.n_attempts} retires.")
         return QueryExpander(
             expanded_queries=[]
         )
     
 
-def answer_query(client: Instructor, user_query: str, model_name: str) -> RAGAnswer:
+def rag_query(client: Instructor, user_query: str, model_name: str) -> RAGAnswer:
     try:
-        system_prompt = ANSWER_QUERY_SYSTEM_PROMPT
+        system_prompt = RAG_QUERY_SYSTEM_PROMPT
         
         decision = client.chat.completions.create(
             model=model_name,
@@ -199,7 +204,7 @@ def answer_query(client: Instructor, user_query: str, model_name: str) -> RAGAns
         )
         return decision
     except InstructorRetryException as e:
-        print(f"Ostrzeżenie: Model nie wygenerował poprawnej wiadomości po {e.n_attempts} próbach.")
+        logger.info(f"Warning! Model could not generate reply after {e.n_attempts} retires.")
 
         return RAGAnswer(
             is_found=False,
@@ -223,7 +228,7 @@ def further_questions_query(client: Instructor, contenxt: str, model_name: str) 
         )
         return questions
     except InstructorRetryException as e:
-        print(f"Ostrzeżenie: Model nie wygenerował poprawnej wiadomości po {e.n_attempts} próbach.")
+        logger.info(f"Warning! Model could not generate reply after {e.n_attempts} retires.")
 
         return RAGQuestions(
             questions=[]

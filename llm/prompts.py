@@ -102,7 +102,7 @@ PARAPHASE_SENTENCE_SYSTEM_PROMPT = """Jesteś bezosobowym mechanicznym procesore
     Output: {"expanded_queries": ["Jakie były konsekwencje starcia pod Waterloo?", "Bitwa pod Waterloo i jej następstwa", "Podaj rezultaty bitwy pod Waterloo."]}
     """
 
-ANSWER_QUERY_SYSTEM_PROMPT = """
+RAG_QUERY_SYSTEM_PROMPT = """
     Jesteś Ekspertem Analizy Treści, wyspecjalizowanym w precyzyjnym wyciąganiu informacji z dostarczonych źródeł. 
     Twoim zadaniem jest odpowiedzieć na zapytanie użytkownika, ściśle przestrzegając poniższych reguł:
 

@@ -1,18 +1,30 @@
-from llm.router import route_query, direct_query, simplify_clean_query, paraphase_query, RouteType, further_questions_query, answer_query
+from llm.router import route_query, direct_query, simplify_clean_query, paraphase_query, RouteType, further_questions_query, rag_query
 from openai import OpenAI
 import instructor
 from collections import defaultdict
-from parser.nlp.toolkit import NLPToolkit
+
 from backend.db.weaviate.connection import WeaviateManager
 from config import WeaviateSettings
 import logging
+from instructor.core.client import Instructor
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from parser.nlp.toolkit import NLPToolkit 
+    from backend.db.weaviate.connection import WeaviateManager
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+from pydantic import BaseModel, Field
+
+class ChatResponse(BaseModel):
+    answer: str = Field(..., description="Chat response")
+    suggested_prompts: list[str] = Field(default_factory=list, description="Suggest")
+
 def unique_chunks(results: list[dict]) -> list[dict]:
+    """Filter unique chunks of given wiki article with the highest rank_score"""
     unique_map = {}
 
     for item in results:
@@ -25,7 +37,7 @@ def unique_chunks(results: list[dict]) -> list[dict]:
 
 
 def get_neighbour_context_keys(results: list[dict]) -> list[tuple[str, int]]:
-
+    """For given list of wiki article chunks, get also N-1 and N+1 chunks that do not overlap with existing ones"""
     existing_keys = {(res['source_id'], res['chunk_id']) for res in results}
     missing_keys = set()
 
@@ -46,6 +58,7 @@ def get_neighbour_context_keys(results: list[dict]) -> list[tuple[str, int]]:
 
 
 def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
+    """Query for LLM containing found wiki chunks and also primary question"""
     if not sorted_chunks:
         return "Brak dostępnego kontekstu."
 
@@ -91,54 +104,60 @@ def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
 
     return xml_output
 
-def rag_search_answer_path(client_llm, question, model_name):
-    result = simplify_clean_query(client_llm, question, model_name)
-    print('-'*30)
-    print('Znormalizowane pytanie: ', result.normalized_queries)
-    print('-'*30)
-    paraphases = []
-    for cleaned_query in result.normalized_queries:
-        result2 = paraphase_query(client_llm, cleaned_query, model_name)
-        paraphases.extend(result2.expanded_queries)
+def rag_search_answer_path(llm_client : Instructor, weaviate_client: WeaviateManager, nlp_toolkit: NLPToolkit, question: str, model_name: str, top_results: int = 6, extended_context: bool = True) -> ChatResponse:
+    simplified_clean = simplify_clean_query(llm_client, question, model_name)
+    logger.info('Simplified and normalized user question: ', simplified_clean.normalized_queries)
 
-    queries = result.normalized_queries + paraphases
+    # paraphase basic question
+    paraphases = []
+    for cleaned_query in simplified_clean.normalized_queries:
+        paraphased = paraphase_query(llm_client, cleaned_query, model_name)
+        paraphases.extend(paraphased.expanded_queries)
+
+    logger.info(paraphases)
+
+    queries = simplified_clean.normalized_queries + paraphases
     vectors = weaviate_client.embed_batch_natively(queries)
-    all_results = []
+
+    basic_chunks = []
     for query_text, query_vector in zip(queries, vectors, strict=True):
         query_results = weaviate_client.single_wikichunk_hybrid_fetch(query_text, query_vector, 10, 0.5)
         scores = nlp_toolkit.rank(query_text, [elem['chunk_text'] for elem in query_results])
         for score, elem in zip(scores, query_results):
             elem['rank_score'] = score
-        all_results.extend(query_results)
-    all_results = unique_chunks(all_results)
+        basic_chunks.extend(query_results)
+    basic_chunks = unique_chunks(basic_chunks)
 
-    top_results = all_results[:6]
-    missing_keys = get_neighbour_context_keys(top_results)
+    basic_chunks = basic_chunks[:top_results]
 
-    grouped_source_chunk_id = defaultdict(list)
-    for s_id, c_id in missing_keys:
-        grouped_source_chunk_id[s_id].append(c_id)
+    # N-1 and N+1 chunks
+    if extended_context:
+        missing_keys = get_neighbour_context_keys(basic_chunks)
+        grouped_source_chunk_id = defaultdict(list)
+        for s_id, c_id in missing_keys:
+            grouped_source_chunk_id[s_id].append(c_id)
 
-    fetched_chunks = weaviate_client.batch_wikichunk_fetch(grouped_source_chunk_id)
-
-    final_chunks = top_results + fetched_chunks
+        extended_chunks = weaviate_client.batch_wikichunk_fetch(grouped_source_chunk_id)
+        final_chunks = basic_chunks + extended_chunks
+    else:
+        final_chunks = basic_chunks
 
     final_sorted_context = sorted(final_chunks, key=lambda x: (x['source_id'], x['chunk_id']))
 
     context_for_llm = prepare_context_for_llm(final_sorted_context, question)
 
-    answer = answer_query(client_llm, context_for_llm, model_name)
+    rag = rag_query(llm_client, context_for_llm, model_name)
 
-    print(answer.answer)
+    logger.info(f"Question: {question}\nAnswer: {rag.answer}")
 
-    further_questions = further_questions_query(client_llm, context_for_llm, model_name)
+    further_questions = further_questions_query(llm_client, context_for_llm, model_name)
 
-    for further_question in further_questions.questions:
-        print(further_question)
+    logger.info(f"Suggested prompts: {further_questions.questions}")
+
+    return ChatResponse(answer=rag.answer, suggested_prompts=further_questions.questions)
 
 
-
-def get_chat_response(question: str, model_name: str):
+def get_chat_response(question: str, model_name: str) -> ChatResponse:
 
     weaviate_settings = WeaviateSettings()
     weaviate_api_key = weaviate_settings.WEAVIATE_APIKEY_KEY
@@ -151,25 +170,26 @@ def get_chat_response(question: str, model_name: str):
     nlp_toolkit = NLPToolkit()
 
 
-    client_llm = instructor.from_openai(
+    llm_client = instructor.from_openai(
         OpenAI(
             base_url="http://localhost:11434/v1",
             api_key="ollama",
         ),
         mode=instructor.Mode.JSON,
     )
-    
 
-    result = route_query(client_llm, question, model_name)
+    route = route_query(llm_client, question, model_name)
+    logger.info(f"ROUTE: {route.user_route.value}")
+
     
-    logger.info(f"Decyzja (Route): {result.user_route.value}")
-    
-    if result.user_route == RouteType.CLARIFY:
-        print(f"Wiadomość od LLM: {result.clarify_message}")
+    if route.user_route == RouteType.CLARIFY:
+        logger.info(f"Chat response: {route.clarify_message}")
+        return ChatResponse(answer=route.clarify_message, suggested_prompts=[])
         
-    elif result.user_route == RouteType.DIRECT:
-        direct_answer = direct_query(client_llm, question, model_name)
-        print(direct_answer.answer)
+    elif route.user_route == RouteType.DIRECT:
+        direct = direct_query(llm_client, question, model_name)
+        logger.info(f"Chat response: {direct.answer}")
+        return ChatResponse(answer=direct.answer, suggested_prompts=[])
 
-    elif result.user_route == RouteType.RAG_SEARCH:
-        rag_search_answer_path(client_llm, question, model_name)
+    elif route.user_route == RouteType.RAG_SEARCH:
+        return rag_search_answer_path(llm_client, weaviate_client, nlp_toolkit, question, model_name)
