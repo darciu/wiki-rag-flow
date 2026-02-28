@@ -32,3 +32,17 @@ class NLP(metaclass=ABCMeta):
     def chunk_texts(self, texts: list[str], max_tokens) -> list[list[str]]:
         """Partition input texts into semantic or logical chunks"""
         pass
+
+    @abstractmethod
+    def rank(self, query: str, texts: list[str]) -> list[float]:
+        """
+        Ranks text candidates against a query using a cross-encoder model.
+
+        Args:
+            query: The search query string.
+            texts: A list of document strings to be scored.
+
+        Returns:
+            A list of relevance scores (higher is better) for each text.
+        """
+        pass
