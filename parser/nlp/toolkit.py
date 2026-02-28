@@ -14,7 +14,7 @@ from parser.nlp.spacy import SpacyUtils
 NERModelName = Literal["herbert", "stanza"]
 KeywordsModelName = Literal["vlt5", "keybert"]
 ChunkingModelName = Literal["langchain", "statistical_chunker"]
-RankingModelName = Literal["ms_marco","ms_marco_multilangual"]
+RankingModelName = Literal["ms_marco", "ms_marco_multilangual"]
 
 
 class NLPToolkit(NLP):
@@ -91,7 +91,7 @@ class NLPToolkit(NLP):
         """Partition input texts into semantic or logical chunks"""
 
         return self.chunking_client.chunk_texts(texts, max_tokens)
-    
+
     def rank(self, query: str, texts: list[str]) -> list[float]:
         """
         Ranks text candidates against a query using a cross-encoder model.

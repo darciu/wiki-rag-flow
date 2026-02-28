@@ -1,9 +1,7 @@
-
-
 import logging
 from pathlib import Path
+
 from sentence_transformers import CrossEncoder
-from typing import List
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -49,9 +47,7 @@ class CrossEncoderMSMarcoClient:
             else:
                 logger.info(f"Load model from local directory: {self.model_dir}")
                 try:
-                    CrossEncoderMSMarcoClient._model = CrossEncoder(
-                        str(self.model_dir)
-                    )
+                    CrossEncoderMSMarcoClient._model = CrossEncoder(str(self.model_dir))
                 except Exception as e:
                     logger.info(
                         f"Error while loading: {e}. Try delete local directory manually: {self.model_dir}"
@@ -62,7 +58,7 @@ class CrossEncoderMSMarcoClient:
 
         return CrossEncoderMSMarcoClient._model
 
-    def rank(self, query: str, texts: List[str]) -> List[float]:
+    def rank(self, query: str, texts: list[str]) -> list[float]:
         """
         Ranks text candidates against a query using a cross-encoder model.
 
@@ -78,7 +74,6 @@ class CrossEncoderMSMarcoClient:
         scores = model.predict(pairs)
 
         return scores.tolist()
-    
 
 
 class UnicampMiniLMMultiClient:
@@ -119,9 +114,7 @@ class UnicampMiniLMMultiClient:
             else:
                 logger.info(f"Load model from local directory: {self.model_dir}")
                 try:
-                    UnicampMiniLMMultiClient._model = CrossEncoder(
-                        str(self.model_dir)
-                    )
+                    UnicampMiniLMMultiClient._model = CrossEncoder(str(self.model_dir))
                 except Exception as e:
                     logger.info(
                         f"Error while loading: {e}. Try delete local directory manually: {self.model_dir}"
@@ -132,7 +125,7 @@ class UnicampMiniLMMultiClient:
 
         return UnicampMiniLMMultiClient._model
 
-    def rank(self, query: str, texts: List[str]) -> List[float]:
+    def rank(self, query: str, texts: list[str]) -> list[float]:
         """
         Ranks text candidates against a query using a cross-encoder model.
 

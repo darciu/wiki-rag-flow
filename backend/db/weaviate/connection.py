@@ -1,9 +1,10 @@
 from types import TracebackType
 from typing import Any
-import weaviate.classes.query as wq
+
 import requests
 import weaviate
 import weaviate.classes.config as wc
+import weaviate.classes.query as wq
 from weaviate.classes.init import Auth
 from weaviate.collections import Collection
 from weaviate.util import generate_uuid5
@@ -247,44 +248,48 @@ class WeaviateManager:
         """
         self.client.collections.delete(collection_name)
 
-    
-
-    def single_wikichunk_hybrid_fetch(self, query_text, query_vector, weaviate_limit, alpha):
+    def single_wikichunk_hybrid_fetch(
+        self, query_text, query_vector, weaviate_limit, alpha
+    ):
 
         collection_name = "WikiChunk"
         collection = self.client.collections.get(collection_name)
         response = collection.query.hybrid(
-                query=query_text,
-                vector=query_vector,
-                limit=weaviate_limit,
-                alpha=alpha,
-                return_properties=["source_id", "source_title", "chunk_id", "chunk_text"],
-                return_metadata=wq.MetadataQuery(score=True) 
-            )
-        
+            query=query_text,
+            vector=query_vector,
+            limit=weaviate_limit,
+            alpha=alpha,
+            return_properties=["source_id", "source_title", "chunk_id", "chunk_text"],
+            return_metadata=wq.MetadataQuery(score=True),
+        )
+
         query_results = []
         for obj in response.objects:
-            query_results.append({
-                "source_id": obj.properties["source_id"],
-                "source_title": obj.properties["source_title"],
-                "chunk_id": obj.properties["chunk_id"],
-                "chunk_text": obj.properties["chunk_text"],
-                "score": obj.metadata.score
-            })
+            query_results.append(
+                {
+                    "source_id": obj.properties["source_id"],
+                    "source_title": obj.properties["source_title"],
+                    "chunk_id": obj.properties["chunk_id"],
+                    "chunk_text": obj.properties["chunk_text"],
+                    "score": obj.metadata.score,
+                }
+            )
 
         return query_results
-    
+
     def wikichunk_combined_filter(self, grouped_source_chunk_id):
 
         filters = []
         for s_id, c_ids in grouped_source_chunk_id.items():
-            f = wq.Filter.by_property("source_id").equal(s_id) & wq.Filter.by_property("chunk_id").contains_any(c_ids)
+            f = wq.Filter.by_property("source_id").equal(s_id) & wq.Filter.by_property(
+                "chunk_id"
+            ).contains_any(c_ids)
             filters.append(f)
 
         combined_filter = wq.Filter.any_of(filters) if len(filters) > 1 else filters[0]
 
         return combined_filter
-    
+
     def batch_wikichunk_fetch(self, grouped_source_chunk_id):
 
         collection_name = "WikiChunk"
@@ -293,18 +298,20 @@ class WeaviateManager:
 
         response = collection.query.fetch_objects(
             filters=combined_filter,
-            limit=len(grouped_source_chunk_id) +1,
-            return_properties=["source_id", "source_title", "chunk_id", "chunk_text"]
+            limit=len(grouped_source_chunk_id) + 1,
+            return_properties=["source_id", "source_title", "chunk_id", "chunk_text"],
         )
         fetched_chunks = []
         for obj in response.objects:
-            fetched_chunks.append({
-                "source_id": obj.properties["source_id"],
-                "source_title": obj.properties.get("source_title", ""),
-                "chunk_id": obj.properties["chunk_id"],
-                "chunk_text": obj.properties["chunk_text"],
-                "score": 0.0, 
-                "rank_score": -999.0 
-            })
+            fetched_chunks.append(
+                {
+                    "source_id": obj.properties["source_id"],
+                    "source_title": obj.properties.get("source_title", ""),
+                    "chunk_id": obj.properties["chunk_id"],
+                    "chunk_text": obj.properties["chunk_text"],
+                    "score": 0.0,
+                    "rank_score": -999.0,
+                }
+            )
 
         return fetched_chunks
