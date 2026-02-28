@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from llm.router import route_query, direct_query, simplify_clean_query, paraphase_query, RouteType, further_questions_query, rag_query
 from openai import OpenAI
 import instructor
@@ -106,7 +108,7 @@ def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
 
 def rag_search_answer_path(llm_client : Instructor, weaviate_client: WeaviateManager, nlp_toolkit: NLPToolkit, question: str, model_name: str, top_results: int = 6, extended_context: bool = True) -> ChatResponse:
     simplified_clean = simplify_clean_query(llm_client, question, model_name)
-    logger.info('Simplified and normalized user question: ', simplified_clean.normalized_queries)
+    logger.info(f'Simplified split and normalized user question: {simplified_clean.normalized_queries}')
 
     # paraphase basic question
     paraphases = []
@@ -153,30 +155,13 @@ def rag_search_answer_path(llm_client : Instructor, weaviate_client: WeaviateMan
     further_questions = further_questions_query(llm_client, context_for_llm, model_name)
 
     logger.info(f"Suggested prompts: {further_questions.questions}")
+    logger.info("\n-----------\n----------\n----------")
 
     return ChatResponse(answer=rag.answer, suggested_prompts=further_questions.questions)
 
 
-def get_chat_response(question: str, model_name: str) -> ChatResponse:
+def get_chat_response(question: str, model_name: str, llm_client, weaviate_client, nlp_toolkit) -> ChatResponse:
 
-    weaviate_settings = WeaviateSettings()
-    weaviate_api_key = weaviate_settings.WEAVIATE_APIKEY_KEY
-
-    weaviate_client = WeaviateManager(
-        api_key=weaviate_api_key,
-        host="127.0.0.1",
-        native_embedding_url="http://127.0.0.1:8008/embed",
-    )
-    nlp_toolkit = NLPToolkit()
-
-
-    llm_client = instructor.from_openai(
-        OpenAI(
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
-        ),
-        mode=instructor.Mode.JSON,
-    )
 
     route = route_query(llm_client, question, model_name)
     logger.info(f"ROUTE: {route.user_route.value}")

@@ -5,7 +5,7 @@ from enum import Enum
 from instructor.exceptions import InstructorRetryException
 from instructor.core.client import Instructor
 
-from prompts import ROUTE_QUERY_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, CLEAN_DATA_SYSTEM_PROMPT, PARAPHASE_SENTENCE_SYSTEM_PROMPT, FURTHER_QUESTIONS_SYSTEM_PROMPT, RAG_QUERY_SYSTEM_PROMPT
+from llm.prompts import ROUTE_QUERY_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, CLEAN_DATA_SYSTEM_PROMPT, PARAPHASE_SENTENCE_SYSTEM_PROMPT, FURTHER_QUESTIONS_SYSTEM_PROMPT, RAG_QUERY_SYSTEM_PROMPT
 import logging
 
 logging.basicConfig(
@@ -220,7 +220,7 @@ def further_questions_query(client: Instructor, contenxt: str, model_name: str) 
             model=model_name,
             response_model=RAGQuestions,
             max_retries=3,
-            temperature=0.1,
+            temperature=0.2,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": contenxt},
