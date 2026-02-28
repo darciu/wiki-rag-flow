@@ -1,6 +1,6 @@
 import logging
-from enum import StrEnum
 
+from backend.app.schemas import RouteType
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
 from pydantic import BaseModel, Field, model_validator
@@ -18,12 +18,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-
-class RouteType(StrEnum):
-    RAG_SEARCH = "RAG_SEARCH"
-    DIRECT = "DIRECT"
-    CLARIFY = "CLARIFY"
 
 
 class QueryDecision(BaseModel):
@@ -116,7 +110,7 @@ class RAGAnswer(BaseModel):
 
 class RAGQuestions(BaseModel):
     questions: list[str] = Field(
-        description="Jedno do trzech pytań wygenerowanych na podstawie podanego kontekstu zwrócone jako lista pytań."
+        description="Jedno do dwóch pytań wygenerowanych na podstawie podanego <context>, inne niż <question>."
     )
 
 

@@ -3,9 +3,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING
-
-from instructor.core.client import Instructor
-from pydantic import BaseModel, Field
+from backend.app.schemas import ChatResponse
 
 from llm.router import (
     RouteType,
@@ -19,6 +17,7 @@ from llm.router import (
 
 if TYPE_CHECKING:
     from backend.db.weaviate.connection import WeaviateManager
+    from instructor.core.client import Instructor
     from parser.nlp.toolkit import NLPToolkit
 
 logging.basicConfig(
@@ -26,10 +25,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-class ChatResponse(BaseModel):
-    answer: str = Field(..., description="Chat response")
-    suggested_prompts: list[str] = Field(default_factory=list, description="Suggest")
 
 
 def unique_chunks(results: list[dict]) -> list[dict]:
@@ -123,7 +118,7 @@ def rag_search_answer_path(
     model_name: str,
     top_results: int = 6,
     extended_context: bool = True,
-) -> ChatResponse:
+):
     simplified_clean = simplify_clean_query(llm_client, question, model_name)
     logger.info(
         f"Simplified split and normalized user question: {simplified_clean.normalized_queries}"
@@ -172,6 +167,7 @@ def rag_search_answer_path(
     )
 
     context_for_llm = prepare_context_for_llm(final_sorted_context, question)
+    logger.info(context_for_llm)
 
     rag = rag_query(llm_client, context_for_llm, model_name)
 
@@ -182,26 +178,25 @@ def rag_search_answer_path(
     logger.info(f"Suggested prompts: {further_questions.questions}")
     logger.info("\n-----------\n----------\n----------")
 
-    return ChatResponse(
-        answer=rag.answer, suggested_prompts=further_questions.questions
-    )
+    return rag.answer, further_questions.questions, RouteType.RAG_SEARCH
+    
 
 
 def get_chat_response(
-    question: str, model_name: str, llm_client, weaviate_client, nlp_toolkit
-) -> ChatResponse:
+    question: str, llm_client: Instructor, weaviate_client: WeaviateManager, nlp_toolkit: NLPToolkit, model_name: str
+):
 
     route = route_query(llm_client, question, model_name)
     logger.info(f"ROUTE: {route.user_route.value}")
 
     if route.user_route == RouteType.CLARIFY:
         logger.info(f"Chat response: {route.clarify_message}")
-        return ChatResponse(answer=route.clarify_message, suggested_prompts=[])
+        return route.clarify_message, [], RouteType.CLARIFY
 
     elif route.user_route == RouteType.DIRECT:
         direct = direct_query(llm_client, question, model_name)
         logger.info(f"Chat response: {direct.answer}")
-        return ChatResponse(answer=direct.answer, suggested_prompts=[])
+        return direct.answer, [], RouteType.DIRECT
 
     elif route.user_route == RouteType.RAG_SEARCH:
         return rag_search_answer_path(

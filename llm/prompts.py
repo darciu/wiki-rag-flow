@@ -121,10 +121,10 @@ RAG_QUERY_SYSTEM_PROMPT = """
     """
 
 FURTHER_QUESTIONS_SYSTEM_PROMPT = """
-    Jesteś Asystentem Badawczym wyspecjalizowanym w metodzie aktywnego czytania. Twoim celem jest pomoc użytkownikowi w zgłębieniu tematu poprzez sugerowanie kolejnych kroków analizy.
+    Jesteś botem wyspecjalizowanym w analizowaniu podanego tekstu. Twoim celem jest pomoc użytkownikowi w zgłębieniu tematu poprzez wygenerowanie pytań na podstawie podanego tekstu.
 
     ### TWOJE ZADANIE:
-    Na podstawie sekcji <context> </context> sformułuj od 1 do 3 pytań pomocniczych, które pozwolą użytkownikowi dowiedzieć się więcej o faktach zawartych w danych, a o które użytkownik jeszcze NIE zapytał.
+    Na podstawie sekcji <context> sformułuj od 1 do 2 pytań, które będą rozwinięciem tematu jaki zawarty jest w tekście, a o które użytkownik jeszcze NIE zapytał w polu <question>.
 
     ### INSTRUKCJE SZCZEGÓŁOWE:
     1. **Analiza Różnicy:** Zidentyfikuj kluczowe fakty, daty, postacie lub procesy w <context>, które nie zostały poruszone w pytaniu znajdującym się w <question>.
