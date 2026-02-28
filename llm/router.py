@@ -30,16 +30,16 @@ class QueryDecision(BaseModel):
     user_route: RouteType = Field(
         ..., description="Przypisz zapytanie do jednej z trzech kategorii."
     )
-    clarify_message: str | None = Field(
-        default=None,
+    clarify_message: str = Field(
+        default="",
         description="""Wypełnij to pole tylko jeśli wartość pola user_route to CLARIFY. W takim przypadku nigdy nie zostawiaj tego pola pustego.
-                    Dla user_route RAG_SEARCH i DIRECT zostaw to pole puste (null).""",
+                    Dla user_route RAG_SEARCH i DIRECT zostaw to pole puste.""",
     )
 
     @model_validator(mode="after")
     def validate_clarify_message(self) -> "QueryDecision":
         if self.user_route == RouteType.CLARIFY:
-            if not self.clarify_message or not self.clarify_message.strip():
+            if self.clarify_message == "" or not self.clarify_message.strip():
                 raise ValueError(
                     """BŁĄD KRYTYCZNY: Skoro user_route to CLARIFY, pole clarify_message nie może być puste. Musisz wygenerować wiadomość dopytującą użytkownika."""
                 )
@@ -115,7 +115,7 @@ class RAGAnswer(BaseModel):
 
 
 class RAGQuestions(BaseModel):
-    questions: list[str | None] = Field(
+    questions: list[str] = Field(
         description="Jedno do trzech pytań wygenerowanych na podstawie podanego kontekstu zwrócone jako lista pytań."
     )
 

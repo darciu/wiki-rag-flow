@@ -34,7 +34,7 @@ class ChatResponse(BaseModel):
 
 def unique_chunks(results: list[dict]) -> list[dict]:
     """Filter unique chunks of given wiki article with the highest rank_score"""
-    unique_map = {}
+    unique_map: dict = {}
 
     for item in results:
         key = (item["source_id"], item["chunk_id"])
