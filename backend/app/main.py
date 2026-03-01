@@ -1,15 +1,20 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Depends, HTTPException, Response
-from llm.interface import get_chat_response
-from backend.app.schemas import ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse
-from uuid import uuid4, UUID
-from parser.nlp.toolkit import NLPToolkit
+from uuid import uuid4
 
+import instructor
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from openai import OpenAI
+
+from backend.app.schemas import (
+    ChatRequest,
+    ChatResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+)
 from backend.db.weaviate.connection import WeaviateManager
 from config import WeaviateSettings
-from openai import OpenAI
-import instructor
-
+from llm.interface import get_chat_response
+from parser.nlp.toolkit import NLPToolkit
 
 
 def create_llm_client():

@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING
-from backend.app.schemas import ChatResponse
 
 from llm.router import (
     RouteType,
@@ -16,8 +15,9 @@ from llm.router import (
 )
 
 if TYPE_CHECKING:
-    from backend.db.weaviate.connection import WeaviateManager
     from instructor.core.client import Instructor
+
+    from backend.db.weaviate.connection import WeaviateManager
     from parser.nlp.toolkit import NLPToolkit
 
 logging.basicConfig(

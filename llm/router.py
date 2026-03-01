@@ -1,10 +1,10 @@
 import logging
 
-from backend.app.schemas import RouteType
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
 from pydantic import BaseModel, Field, model_validator
 
+from backend.app.schemas import RouteType
 from llm.prompts import (
     CLEAN_DATA_SYSTEM_PROMPT,
     DIRECT_ANSWER_SYSTEM_PROMPT,

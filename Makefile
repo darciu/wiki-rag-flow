@@ -59,3 +59,9 @@ project-up: emb-run-bg
 
 project-down: emb-stop
 	docker-compose down
+
+uvicorn-up:
+	uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+
+streamlit-up:
+	streamlit run frontend/streamlit.py
