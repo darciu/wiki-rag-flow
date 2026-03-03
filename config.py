@@ -35,3 +35,7 @@ class WeaviateSettings(BaseSettings):
 class ScraperSettings(BaseSettings):
     WIKI_DOWNLOAD_PATH: str = "/app/data/wiki_dumps/"
     RSS_URL: str = "https://dumps.wikimedia.org/plwiki/latest/plwiki-latest-pages-articles-multistream-index.txt.bz2-rss.xml"
+
+class OllamaSettings(BaseSettings):
+    BASE_URL: str = "http://localhost:11434/v1"
+    

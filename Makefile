@@ -23,9 +23,6 @@ build-scraper:
 run-scraper:
 	docker-compose run --rm scraper
 
-run-parser:
-	dotenv -e .env python -m parser.wiki
-
 run-mongo:
 	docker-compose up -d mongodb
 
@@ -65,3 +62,12 @@ uvicorn-up:
 
 streamlit-up:
 	streamlit run frontend/streamlit.py
+
+ollama-health:
+	docker inspect --format='{{.State.Health.Status}}' local_ollama
+
+ollama-pull-llama:
+	docker exec local_ollama ollama pull llama3.2
+
+ollama-pull-qwen:
+	docker exec local_ollama ollama pull qwen3:4b

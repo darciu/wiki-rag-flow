@@ -18,3 +18,4 @@ downloaded_data/
 models/
 *.pid
 *.log
+ollama/

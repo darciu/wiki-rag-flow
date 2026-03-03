@@ -63,18 +63,32 @@ services:
       weaviate:
         condition: service_healthy
 
-  # verba:
-  #   image: semitechnologies/verba:latest
-  #   container_name: local_verba
-  #   ports:
-  #     - "8008:8000"
-  #   environment:
-  #     - WEAVIATE_URL_VERBA=http://weaviate:8080
-  #     - WEAVIATE_API_KEY_VERBA=${WEAVIATE_APIKEY_KEY}
+  ollama:
+    image: ollama/ollama:latest
+    container_name: local_ollama
+    restart: always
+    ports:
+    - "11434:11434"
+    volumes:
+    - ./backend/ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ollama-pull-model:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama_pull_model
+  #   volumes:
+  #     - ./backend/ollama:/root/.ollama
   #   depends_on:
-  #     weaviate:
+  #     ollama:
   #       condition: service_healthy
-  #   restart: unless-stopped
+  #   entrypoint: /bin/sh
+  #   command: -c "ollama pull llama3.2"
+
 
   scraper:
     build:

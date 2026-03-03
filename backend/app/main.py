@@ -12,14 +12,17 @@ from backend.app.schemas import (
     FeedbackResponse,
 )
 from backend.db.weaviate.connection import WeaviateManager
-from config import WeaviateSettings
+from config import WeaviateSettings, OllamaSettings
 from llm.interface import get_chat_response
 from parser.nlp.toolkit import NLPToolkit
 
 
 def create_llm_client():
+    ollama_settings = OllamaSettings()
+    ollama_base_url = ollama_settings.BASE_URL
+    
     raw = OpenAI(
-        base_url="http://localhost:11434/v1",
+        base_url=ollama_base_url,
         api_key="ollama",
         timeout=5.0, 
     )
