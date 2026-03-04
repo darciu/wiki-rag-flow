@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from uuid import uuid4
-
+import os 
 import instructor
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from openai import OpenAI
@@ -19,7 +19,7 @@ from parser.nlp.toolkit import NLPToolkit
 
 def create_llm_client():
     ollama_settings = OllamaSettings()
-    ollama_base_url = ollama_settings.BASE_URL
+    ollama_base_url = ollama_settings.OLLAMA_BASE_URL
     
     raw = OpenAI(
         base_url=ollama_base_url,
@@ -34,11 +34,14 @@ def create_weaviate_client():
 
     weaviate_settings = WeaviateSettings()
     weaviate_api_key = weaviate_settings.WEAVIATE_APIKEY_KEY
+    weaviate_host = weaviate_settings.WEAVIATE_HOST
+    embed_url = weaviate_settings.EMBEDDING_SERVER_URL
+
 
     weaviate_client = WeaviateManager(
         api_key=weaviate_api_key,
-        host="127.0.0.1",
-        native_embedding_url="http://127.0.0.1:8008/embed",
+        host=weaviate_host,
+        native_embedding_url=embed_url,
     )
     return weaviate_client
 

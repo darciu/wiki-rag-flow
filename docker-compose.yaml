@@ -30,16 +30,16 @@ services:
     env_file:
       - .env
     environment:
-      QUERY_DEFAULTS_LIMIT: 5
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
-      AUTHENTICATION_APIKEY_ENABLED: "true"
-      AUTHENTICATION_APIKEY_USERS: ${WEAVIATE_APIKEY_USER}
-      AUTHENTICATION_APIKEY_ALLOWED_KEYS: ${WEAVIATE_APIKEY_KEY}
-      CORS_ALLOW_ORIGIN: "http://localhost:3000"
-      CORS_ALLOW_HEADERS: "Content-Type,Authorization,X-API-KEY"
-      CORS_ALLOW_METHODS: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
-      CLUSTER_HOSTNAME: "node_local"
+      - QUERY_DEFAULTS_LIMIT=5
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - AUTHENTICATION_APIKEY_ENABLED=true
+      - AUTHENTICATION_APIKEY_USERS=${WEAVIATE_APIKEY_USER}
+      - AUTHENTICATION_APIKEY_ALLOWED_KEYS=${WEAVIATE_APIKEY_KEY}
+      - CORS_ALLOW_ORIGIN=http://localhost:3000
+      - CORS_ALLOW_HEADERS=Content-Type,Authorization,X-API-KEY
+      - CORS_ALLOW_METHODS=GET,POST,PUT,PATCH,DELETE,OPTIONS
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - CLUSTER_HOSTNAME=node_local
     volumes:
       - ./backend/db/weaviate/data:/var/lib/weaviate
     healthcheck:
@@ -78,16 +78,28 @@ services:
       retries: 10
       start_period: 10s
 
-  # ollama-pull-model:
-  #   image: ollama/ollama:latest
-  #   container_name: ollama_pull_model
-  #   volumes:
-  #     - ./backend/ollama:/root/.ollama
-  #   depends_on:
-  #     ollama:
-  #       condition: service_healthy
-  #   entrypoint: /bin/sh
-  #   command: -c "ollama pull llama3.2"
+  api:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile_fastapi
+    container_name: fastapi
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    environment:
+      - WEAVIATE_APIKEY_KEY=${WEAVIATE_APIKEY_KEY}
+      - OLLAMA_BASE_URL=http://local_ollama:11434/v1
+      - WEAVIATE_HOST=weaviate
+      - EMBEDDING_SERVER_URL=http://host.docker.internal:8008/embed
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      ollama:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
 
 
   scraper:

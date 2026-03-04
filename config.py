@@ -22,7 +22,8 @@ class MongoDBSettings(BaseSettings):
 
 class WeaviateSettings(BaseSettings):
     WEAVIATE_APIKEY_KEY: str = ""
-    WEAVIATE_EMBEDDING_SERVER_URL: str = "http://0.0.0.0:8001/embed"
+    EMBEDDING_SERVER_URL: str = "http://0.0.0.0:8001/embed"
+    WEAVIATE_HOST: str = "127.0.0.1"
     WEAVIATE_PORT: int = 8080
     WEAVIATE_GRPC_PORT: int = 50051
 
@@ -37,5 +38,6 @@ class ScraperSettings(BaseSettings):
     RSS_URL: str = "https://dumps.wikimedia.org/plwiki/latest/plwiki-latest-pages-articles-multistream-index.txt.bz2-rss.xml"
 
 class OllamaSettings(BaseSettings):
-    BASE_URL: str = "http://localhost:11434/v1"
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    
     
