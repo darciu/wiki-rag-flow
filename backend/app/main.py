@@ -24,7 +24,7 @@ def create_llm_client():
     raw = OpenAI(
         base_url=ollama_base_url,
         api_key="ollama",
-        timeout=5.0, 
+        timeout=120.0, 
     )
     llm_client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
     return raw, llm_client

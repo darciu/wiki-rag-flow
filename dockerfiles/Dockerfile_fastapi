@@ -6,7 +6,9 @@ COPY requirements/backend.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY llm/ /app/llm/
-COPY backend/ /app/backend/
+COPY backend/db/weaviate/ /app/backend/db/weaviate/
+COPY backend/app/ /app/backend/app/
+COPY nlp/ /app/nlp/
 COPY config.py /app/config.py
 
 ENV PYTHONPATH=/app

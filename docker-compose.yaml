@@ -63,20 +63,6 @@ services:
       weaviate:
         condition: service_healthy
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: local_ollama
-    restart: always
-    ports:
-    - "11434:11434"
-    volumes:
-    - ./backend/ollama:/root/.ollama
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
 
   api:
     build:
@@ -90,14 +76,12 @@ services:
       - "8000:8000"
     environment:
       - WEAVIATE_APIKEY_KEY=${WEAVIATE_APIKEY_KEY}
-      - OLLAMA_BASE_URL=http://local_ollama:11434/v1
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
       - WEAVIATE_HOST=weaviate
       - EMBEDDING_SERVER_URL=http://host.docker.internal:8008/embed
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      ollama:
-        condition: service_healthy
       weaviate:
         condition: service_healthy
 
