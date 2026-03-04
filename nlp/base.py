@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
-from parser.entities import NEREntities
+from nlp.entities import NEREntities
 
 
 class NLP(metaclass=ABCMeta):

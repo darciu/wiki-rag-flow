@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from backend.db.mongodb.connection import MongoManager
     from backend.db.weaviate.connection import WeaviateManager
 
-from parser.nlp.toolkit import NLPToolkit
+from nlp.toolkit import NLPToolkit
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

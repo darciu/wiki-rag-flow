@@ -14,7 +14,7 @@ from backend.app.schemas import (
 from backend.db.weaviate.connection import WeaviateManager
 from config import WeaviateSettings, OllamaSettings
 from llm.interface import get_chat_response
-from parser.nlp.toolkit import NLPToolkit
+from nlp.toolkit import NLPToolkit
 
 
 def create_llm_client():

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from instructor.core.client import Instructor
 
     from backend.db.weaviate.connection import WeaviateManager
-    from parser.nlp.toolkit import NLPToolkit
+    from nlp.toolkit import NLPToolkit
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

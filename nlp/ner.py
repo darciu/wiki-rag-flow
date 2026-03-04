@@ -6,7 +6,7 @@ from statistics import mean
 import stanza  # type: ignore
 from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
 
-from parser.entities import NEREntities
+from nlp.entities import NEREntities
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

@@ -1,15 +1,15 @@
 from typing import Literal
 
-from parser.base import NLP
-from parser.entities import NEREntities
-from parser.nlp.chunking import LangchainSplitterClient, StatisticalChunkerClient
-from parser.nlp.keywords import KeyBERTKeywordsClient, VLT5KeywordsClient
-from parser.nlp.ner import (
+from nlp.base import NLP
+from nlp.entities import NEREntities
+from nlp.chunking import LangchainSplitterClient, StatisticalChunkerClient
+from nlp.keywords import KeyBERTKeywordsClient, VLT5KeywordsClient
+from nlp.ner import (
     HerbertNERClient,
     StanzaNERClient,
 )
-from parser.nlp.ranking import CrossEncoderMSMarcoClient, UnicampMiniLMMultiClient
-from parser.nlp.spacy import SpacyUtils
+from nlp.ranking import CrossEncoderMSMarcoClient, UnicampMiniLMMultiClient
+from nlp.spacy import SpacyUtils
 
 NERModelName = Literal["herbert", "stanza"]
 KeywordsModelName = Literal["vlt5", "keybert"]
