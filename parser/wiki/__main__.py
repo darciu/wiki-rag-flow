@@ -7,8 +7,8 @@ import time
 from backend.db.mongodb.connection import MongoManager
 from backend.db.weaviate.connection import WeaviateManager
 from config import MongoDBSettings, WeaviateSettings
-from parser.nlp.toolkit import NLPToolkit
-from parser.nlp.utils import process_batch
+from nlp.toolkit import NLPToolkit
+from nlp.utils import process_batch
 
 logger = logging.getLogger(__name__)
 

@@ -8,6 +8,7 @@ EMB_PY := $(EMB_VENV)/bin/python
 EMB_UVICORN := $(EMB_VENV)/bin/uvicorn
 EMB_PID := $(EMB_DIR)/embedding_server.pid
 EMB_LOG := $(EMB_DIR)/embedding_server.log
+OLLAMA_PID := ollama.pid
 
 HOST ?= 0.0.0.0
 
@@ -15,16 +16,13 @@ EMB_PORT ?= 8008
 EMB_BASE := http://$(HOST):$(EMB_PORT)
 
 
-.PHONY: emb-venv emb-run-bg emb-stop emb-health
+.PHONY: emb-venv emb-run-bg emb-stop emb-health ollama-up ollama-stop ollama-pull-llama ollama-pull-qwen project-up project-down
 
 build-scraper:
 	docker-compose build scraper
 
 run-scraper:
 	docker-compose run --rm scraper
-
-run-parser:
-	dotenv -e .env python -m parser.wiki
 
 run-mongo:
 	docker-compose up -d mongodb
@@ -54,8 +52,35 @@ emb-stop:
 emb-health:
 	@curl -fsS "$(EMB_BASE)/health" && echo || (echo "Healthcheck failed. See $(EMB_LOG)"; exit 1)
 
-project-up: emb-run-bg
+project-up: emb-run-bg ollama-up
 	docker-compose up --build -d
 
-project-down: emb-stop
+project-down: emb-stop ollama-stop
 	docker-compose down
+
+uvicorn-up:
+	uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+
+streamlit-up:
+	streamlit run frontend/streamlit.py
+
+ollama-set-env:
+	launchctl setenv OLLAMA_HOST "0.0.0.0"
+	@echo "Zmienna OLLAMA_HOST ustawiona na 0.0.0.0. Zrestartuj aplikację Ollama, jeśli była otwarta."
+
+ollama-up:
+	OLLAMA_HOST=0.0.0.0 OLLAMA_KEEP_ALIVE=-1 nohup ollama serve > ollama.log 2>&1 & echo $$! > $(OLLAMA_PID)
+	@sleep 2
+
+ollama-stop:
+	kill $$(cat $(OLLAMA_PID)) 2>/dev/null || true
+	rm -f $(OLLAMA_PID)
+	
+ollama-pull-llama: ollama-up
+	ollama pull llama3.2
+
+ollama-pull-qwen: ollama-up
+	ollama pull qwen:4b
+
+ollama-health:
+	@curl -fsS "http://localhost:11434/api/tags" > /dev/null && echo "Ollama is Healthy" || (echo "Ollama is NOT running"; exit 1)
