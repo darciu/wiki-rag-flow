@@ -39,6 +39,6 @@ class FeedbackResponse(BaseModel):
     chat_route: RouteType = Field(..., description="LLMs routing")
     chat_response_id: UUID = Field(..., description="Chat response ID")
     user_agent: str | None = Field(None, description="User data from browser")
-    session_id: str = Field(..., description="Cookie session id")
+    session_id: str | None = Field(..., description="Cookie session id")
     app_run_id: UUID = Field(..., description="FastAPI run ID")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
