@@ -1,5 +1,6 @@
 import requests
 import streamlit as st
+
 from config import FrontendSettings
 
 frontend_settings = FrontendSettings()
@@ -59,10 +60,10 @@ if "pending_source" not in st.session_state:
     st.session_state.pending_source = None
 
 if "feedback_available" not in st.session_state:
-    st.session_state.feedback_available = False 
+    st.session_state.feedback_available = False
 
 if "feedback_sent" not in st.session_state:
-    st.session_state.feedback_sent = False 
+    st.session_state.feedback_sent = False
 
 if "http" not in st.session_state:
     st.session_state.http = requests.Session()
@@ -223,7 +224,10 @@ with left:
 
 with right:
     with st.container(border=True):
-        st.markdown("<h5 style='text-align:center; margin:0;'>Feedback</h5>", unsafe_allow_html=True)
+        st.markdown(
+            "<h5 style='text-align:center; margin:0;'>Feedback</h5>",
+            unsafe_allow_html=True,
+        )
 
         feedback_disabled = (
             bool(st.session_state.pending_question)

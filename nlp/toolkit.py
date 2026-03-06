@@ -1,8 +1,8 @@
 from typing import Literal
 
 from nlp.base import NLP
-from nlp.entities import NEREntities
 from nlp.chunking import LangchainSplitterClient, StatisticalChunkerClient
+from nlp.entities import NEREntities
 from nlp.keywords import KeyBERTKeywordsClient, VLT5KeywordsClient
 from nlp.ner import (
     HerbertNERClient,

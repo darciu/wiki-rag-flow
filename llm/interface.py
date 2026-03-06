@@ -26,7 +26,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-
 def unique_chunks(results: list[dict]) -> list[dict]:
     """Filter unique chunks of given wiki article with the highest rank_score"""
     unique_map: dict = {}
@@ -179,11 +178,14 @@ def rag_search_answer_path(
     logger.info("\n-----------\n----------\n----------")
 
     return rag.answer, further_questions.questions, RouteType.RAG_SEARCH
-    
 
 
 def get_chat_response(
-    question: str, llm_client: Instructor, weaviate_client: WeaviateManager, nlp_toolkit: NLPToolkit, model_name: str
+    question: str,
+    llm_client: Instructor,
+    weaviate_client: WeaviateManager,
+    nlp_toolkit: NLPToolkit,
+    model_name: str,
 ):
 
     route = route_query(llm_client, question, model_name)
