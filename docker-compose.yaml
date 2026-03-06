@@ -64,11 +64,11 @@ services:
         condition: service_healthy
 
 
-  api:
+  fastapi-backend:
     build:
       context: .
       dockerfile: dockerfiles/Dockerfile_fastapi
-    container_name: fastapi
+    container_name: fastapi-backend
     restart: always
     env_file:
       - .env
@@ -84,6 +84,17 @@ services:
     depends_on:
       weaviate:
         condition: service_healthy
+
+  frontend:
+    build: 
+      context: .
+      dockerfile: dockerfiles/Dockerfile_frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - FASTAPI_BACKEND_URL=http://fastapi-backend:8000
+    depends_on:
+      - fastapi-backend
 
 
   scraper:

@@ -1,8 +1,12 @@
 import requests
 import streamlit as st
+from config import FrontendSettings
 
-API_CHAT_URL = "http://localhost:8000/chat"
-API_FEEDBACK_URL = "http://localhost:8000/feedback"
+frontend_settings = FrontendSettings()
+FASTAPI_BACKEND_URL = frontend_settings.FASTAPI_BACKEND_URL
+
+API_CHAT_URL = f"{FASTAPI_BACKEND_URL}/chat"
+API_FEEDBACK_URL = f"{FASTAPI_BACKEND_URL}/feedback"
 
 st.set_page_config(page_title="WIKI RAG - Chat", layout="wide")
 

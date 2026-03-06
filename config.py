@@ -39,5 +39,8 @@ class ScraperSettings(BaseSettings):
 
 class OllamaSettings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+
+class FrontendSettings(BaseSettings):
+    FASTAPI_BACKEND_URL: str = "http://localhost:8000"
     
     
