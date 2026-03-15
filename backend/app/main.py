@@ -13,7 +13,7 @@ from backend.app.schemas import (
 )
 from backend.db.weaviate.connection import WeaviateManager
 from config import OllamaSettings, WeaviateSettings
-from llm.interface import get_chat_response
+from llm_1.interface import get_chat_response
 from nlp.toolkit import NLPToolkit
 
 

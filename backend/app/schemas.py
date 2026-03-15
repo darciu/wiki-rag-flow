@@ -10,6 +10,7 @@ class RouteType(StrEnum):
     RAG_SEARCH = "RAG_SEARCH"
     DIRECT = "DIRECT"
     CLARIFY = "CLARIFY"
+    MATH = "MATH"
 
 
 class ChatRequest(BaseModel):

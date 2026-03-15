@@ -5,7 +5,7 @@ from instructor.exceptions import InstructorRetryException
 from pydantic import BaseModel, Field, model_validator
 
 from backend.app.schemas import RouteType
-from llm.prompts import (
+from llm_1.prompts import (
     CLEAN_DATA_SYSTEM_PROMPT,
     DIRECT_ANSWER_SYSTEM_PROMPT,
     FURTHER_QUESTIONS_SYSTEM_PROMPT,
@@ -255,3 +255,134 @@ def further_questions_query(
         )
 
         return RAGQuestions(questions=[])
+
+
+PLANNER_SYSTEM_PROMPT = """
+Jesteś plannerem routingu zapytań użytkownika.
+
+Twoim zadaniem NIE jest odpowiadanie na pytanie użytkownika.
+Masz tylko zwrócić strukturę planu wykonania dalszego routingu.
+
+Dostępne route:
+- clarify: wybierz, gdy pytanie jest niejednoznaczne, niepełne lub wymaga doprecyzowania.
+- direct: wybierz, gdy model jest w stanie odpowiedzieć bez wyszukiwania w bazie wiedzy.
+- rag_search: wybierz, gdy odpowiedź wymaga wyszukania informacji w bazie wiedzy lub dokumentach.
+
+Dostępne task:
+- lookup: użytkownik szuka informacji o jednym obiekcie lub temacie
+- compare: użytkownik chce porównać co najmniej dwa obiekty
+- extract: użytkownik chce wydobyć konkretny fakt, datę, wartość lub cechę
+- summarize: użytkownik chce streszczenia
+
+
+Zasady:
+1. Jeśli pytanie jest niejasne, wybierz route=clarify.
+2. Jeśli route=clarify, ustaw clarify_message i nie generuj search_queries.
+3. Jeśli route=direct, search_queries powinny być puste.
+4. Jeśli route=rag_search, wygeneruj sensowne search_queries do wyszukiwania.
+5. Jeśli pytanie dotyczy porównania, ustaw task=compare i spróbuj wykryć entities.
+6. normalized_question ma być krótką, poprawioną i jednoznaczną wersją pytania użytkownika.
+7. Nie odpowiadaj merytorycznie na pytanie użytkownika.
+8. Zwracaj tylko strukturę zgodną ze schematem.
+"""
+
+
+from enum import StrEnum
+
+
+class RouteType(StrEnum):
+    RAG_SEARCH = "rag_search"
+    DIRECT = "direct"
+    CLARIFY = "clarify"
+
+
+class TaskType(StrEnum):
+    LOOKUP = "lookup"
+    COMPARE = "compare"
+    EXTRACT = "extract"
+    SUMMARIZE = "summarize"
+
+
+class QueryPlanner(BaseModel):
+    route: RouteType = Field(
+        ...,
+        description="Wybór głównej ścieżki obsługi pytania: clarify, direct albo rag_search.",
+    )
+    task: TaskType | None = Field(
+        default=None,
+        description="Typ zadania: lookup, compare, extract, summarize. Tylko i wyłącznie jeśli route=rag_search.",
+    )
+    clarify_message: str | None = Field(
+        default=None,
+        description="Pytanie doprecyzowujące dla użytkownika, tylko i wyłącznie jeśli route=clarify.",
+    )
+
+    search_queries: list[str] = Field(
+        default_factory=list,
+        description="Lista zapytań do wyszukiwania w bazie wiedzy. Tylko i wyłącznie jeśli route=rag_search.",
+    )
+
+    normalized_question: str = Field(
+        description="Uproszczona i jednoznaczna wersja pytania użytkownika."
+    )
+    entities: list[str] = Field(
+        default_factory=list,
+        description="Wykryte encje lub obiekty, np. ['PostgreSQL', 'MySQL'].",
+    )
+
+    @model_validator(mode="after")
+    def validate_consistency(self):
+        if self.route == RouteType.CLARIFY and not self.clarify_message:
+            raise ValueError("clarify_message is required when route=clarify")
+
+        if self.route == RouteType.DIRECT and self.search_queries:
+            raise ValueError("search_queries must be empty when route=direct")
+
+        if self.route == RouteType.CLARIFY and self.search_queries:
+            raise ValueError("search_queries must be empty when route=clarify")
+
+        if self.route == RouteType.RAG_SEARCH and not self.search_queries:
+            raise ValueError("search_queries should not be empty when route=rag_search")
+
+        if self.route == RouteType.RAG_SEARCH and not self.task:
+            raise ValueError("task should not be empty when route=rag_search")
+
+        if self.task == TaskType.COMPARE and len(self.entities) < 2:
+            raise ValueError("compare task requires at least 2 entities")
+
+        if self.route == RouteType.DIRECT or self.route == RouteType.CLARIFY:
+            self.search_queries = []
+
+        if self.route != RouteType.CLARIFY:
+            self.clarify_message = None
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_confidence_consistency(self):
+        if self.route == RouteType.CLARIFY and self.confidence < 0.5:
+            raise ValueError("clarify route should have confidence >= 0.5")
+        return self
+
+
+def create_plan(llm_client: Instructor, question: str, model_name: str) -> QueryPlanner:
+
+    try:
+        return llm_client.chat.completions.create(
+            model=model_name,
+            response_model=QueryPlanner,
+            max_retries=3,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
+                {
+                    "role": "system",
+                    "content": "Baza wiedzy zawiera artykuły polskiej Wikipedii podzielonej na chunki",
+                },
+                {"role": "user", "content": question},
+            ],
+        )
+    except InstructorRetryException as e:
+        logger.info(
+            f"Warning! Model could not generate reply after {e.n_attempts} retires."
+        )
