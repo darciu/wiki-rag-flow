@@ -141,9 +141,20 @@ Available TaskTypes (only when route_type="rag_search"):
 
 """
 
+DIRECT_ANSWER_SYSTEM_PROMPT = """
+    You are a language model with general knowledge. 
+    Answer the given question directly and concisely.
+
+    ## CRITICAL RULES:
+    1. If you know the answer: Return it in the 'answer' field and set 'knows_answer' to True.
+    2. If you are NOT SURE or the question concerns facts on which the model was not trained (e.g., yesterday's events): 
+    In the 'answer' field, write something like: "Niestety, moja wiedza nie jest wystarczająca w tym temacie" and set 'knows_answer' to False.
+    3. Never make up facts (do not hallucinate).
+    4. Always provide answers exclusively in Polish.
+    """
 
 MATH_SYSTEM_PROMPT = """
 You are a mathematical routing assistant. The user will provide a query involving two numbers.
-Your ONLY task is to select the appropriate mathematical tool (add, subtract, multiply, divide)
-and pass the two numbers to it as arguments.
+Your ONLY task is to select the appropriate mathematical tool (add, subtract, multiply, divide, power, square_root, absolute_value)
+and extract the correct number of arguments required by that tool.
 """

@@ -2,7 +2,7 @@ from typing import TypedDict, Annotated, List
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AnyMessage
 import logging
-
+import math
 import instructor
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
@@ -26,7 +26,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AIMessage
-from llm.routing import create_plan
+from llm.routing import create_plan, direct_query
 from llm.routing import RouteType, TaskType
 from llm.prompts import MATH_SYSTEM_PROMPT
 logging.basicConfig(
@@ -41,6 +41,8 @@ class AgentState(TypedDict):
     route: RouteType
     task_type: TaskType
     clarify_message: str | None
+    knows_answer: bool | None
+
 
 @tool
 def add(a: float, b: float) -> float:
@@ -64,7 +66,24 @@ def divide(a: float, b: float) -> float:
         raise ValueError("Cannot divide by zero!")
     return a / b
 
-math_tools = [add, subtract, multiply, divide]
+@tool
+def power(base: float, exponent: float) -> float:
+    """Raises the base to the power of the exponent: base ** exponent."""
+    return math.pow(base, exponent)
+
+@tool
+def square_root(a: float) -> float:
+    """Calculates the square root of a single number. The number must be non-negative."""
+    if a < 0:
+        raise ValueError("Cannot calculate the square root of a negative number.")
+    return math.sqrt(a)
+
+@tool
+def absolute_value(a: float) -> float:
+    """Calculates the absolute value of a single number."""
+    return abs(a)
+
+math_tools = [add, subtract, multiply, divide, power, square_root, absolute_value]
 
 def router_node(state: AgentState, config: RunnableConfig) -> dict:
     last_message = state["messages"][-1].content
@@ -82,30 +101,36 @@ def router_node(state: AgentState, config: RunnableConfig) -> dict:
     }
 
 
-def rag_search_node(state: AgentState) -> dict:
+def rag_search_node(state: AgentState, config: RunnableConfig) -> dict:
     return {
         "messages": [AIMessage(content="rag search")]
     }
 
 
-def direct_node(state: AgentState) -> dict:
-    return {
-        "messages": [
-            AIMessage(content="direct answer")
-        ]
-    }
+def direct_node(state: AgentState, config: RunnableConfig) -> dict:
+
+    instructor_client = config.get("configurable", {}).get("instructor_client")
+    if not instructor_client:
+        raise ValueError("Could not find instructor_client")
+    
+    current_query = state["current_query"]
+    
+    decision = direct_query(instructor_client, current_query, "llama3.2")
+
+    return {"messages": [AIMessage(content=decision.answer)],
+            "knows_answer":decision.knows_answer}
 
 
-def clarify_node(state: AgentState) -> dict:
+def clarify_node(state: AgentState, config: RunnableConfig) -> dict:
     return {"messages": [AIMessage(content=state["clarify_message"])]}
 
 
 def math_node(state: AgentState, config: RunnableConfig) -> dict:
-    last_message = state["messages"][-1].content
+    current_query = state["current_query"]
     
     langchain_client = config.get("configurable", {}).get("langchain_client")
     if not langchain_client:
-        raise ValueError("Krytyczny błąd: Nie wstrzyknięto chat_model do obsługi narzędzi!")
+        raise ValueError("Could not find langchain client")
 
     math_langchain_client = langchain_client.bind_tools(math_tools)
     
@@ -114,7 +139,7 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
         content=MATH_SYSTEM_PROMPT
     )
     
-    response = math_langchain_client.invoke([system_prompt, {"role": "user", "content": last_message}])
+    response = math_langchain_client.invoke([system_prompt, {"role": "user", "content": current_query}])
     
     if response.tool_calls:
         tool_call = response.tool_calls[0]
