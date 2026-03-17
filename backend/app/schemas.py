@@ -5,12 +5,16 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-
 class RouteType(StrEnum):
-    RAG_SEARCH = "RAG_SEARCH"
-    DIRECT = "DIRECT"
-    CLARIFY = "CLARIFY"
-    MATH = "MATH"
+    RAG_SEARCH = "rag_search"
+    DIRECT = "direct"
+    CLARIFY = "clarify"
+    MATH = "math"
+
+class TaskType(StrEnum):
+    LOOKUP = "lookup"
+    COMPARE = "compare"
+    SUMMARIZE = "summarize"
 
 
 class ChatRequest(BaseModel):

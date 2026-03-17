@@ -6,7 +6,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, model_validator
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
-from llm.prompts import PLANNER_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT
+from llm.prompts import PLANNER_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, PROCESS_SYSTEM_PROMPT, LOOKUP_SYSTEM_PROMPT
 import instructor
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
@@ -29,26 +29,13 @@ from langgraph.prebuilt import ToolNode
 from langchain_ollama import ChatOllama
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
+from backend.app.schemas import RouteType, TaskType
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-
-from enum import StrEnum
-
-
-class RouteType(StrEnum):
-    RAG_SEARCH = "rag_search"
-    DIRECT = "direct"
-    CLARIFY = "clarify"
-    MATH = "math"
-
-class TaskType(StrEnum):
-    LOOKUP = "lookup"
-    COMPARE = "compare"
-    SUMMARIZE = "summarize"
 
 class QueryPlanner(BaseModel):
     route_type: RouteType = Field(
@@ -95,7 +82,20 @@ class DirectQuestion(BaseModel):
                 "The answer field must contain meaningful content, even if you admit you cannot provide the answer."
             )
         return self
-    
+
+class QueryProcessing(BaseModel):
+    queries: list[str] = Field(
+        ..., description="List of 1-3 different paraphrases of the underlying query."
+    )
+
+
+class LookupQuery(BaseModel):
+    answer: str = Field(
+        description="Answer to the question from <context>."
+    )
+    further_questions: List[str] = Field(
+        description="List of one or two questions generated from the given <context>, other than <question>."
+    )
 
 def create_plan(llm_client: Instructor, question: str, model_name: str) -> QueryPlanner:
 
@@ -136,4 +136,54 @@ def direct_query(
             answer="Przepraszam, ale nie jestem w stanie odpowiedzieć na to pytanie.",
             knows_answer=False,
             confidence_score=0.0,
+        )
+    
+
+
+def process_query(
+    client: Instructor, user_query: str, model_name: str
+) -> QueryProcessing:
+
+    try:
+        return client.chat.completions.create(
+            model=model_name,
+            response_model=QueryProcessing,
+            temperature=0.0,
+            max_retries=3,
+            messages=[
+                {"role": "system", "content": PROCESS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_query},
+            ],
+        )
+
+    except InstructorRetryException as e:
+        logger.info(
+            f"Warning! Model could not generate reply after {e.n_attempts} retires."
+        )
+        return QueryProcessing(queries=[])
+    
+
+def lookup_query(client: Instructor, context: str, model_name: str) -> LookupQuery:
+    try:
+        system_prompt = LOOKUP_SYSTEM_PROMPT
+
+        decision = client.chat.completions.create(
+            model=model_name,
+            response_model=LookupQuery,
+            max_retries=3,
+            temperature=0.0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context},
+            ],
+        )
+        return decision
+    except InstructorRetryException as e:
+        logger.info(
+            f"Warning! Model could not generate reply after {e.n_attempts} retires."
+        )
+
+        return LookupQuery(
+            is_found=False,
+            answer="Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.",
         )

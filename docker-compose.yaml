@@ -76,7 +76,7 @@ services:
       - "8000:8000"
     environment:
       - WEAVIATE_APIKEY_KEY=${WEAVIATE_APIKEY_KEY}
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - WEAVIATE_HOST=weaviate
       - EMBEDDING_SERVER_URL=http://host.docker.internal:8008/embed
     extra_hosts:

@@ -27,7 +27,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AIMessage
-from llm.routing import create_plan, direct_query
+from llm.routing import create_plan, direct_query, process_query, lookup_query
 from llm.routing import RouteType, TaskType
 from llm.prompts import MATH_SYSTEM_PROMPT
 logging.basicConfig(
@@ -39,10 +39,76 @@ logger = logging.getLogger(__name__)
 class AgentState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
     current_query: str
+    answer: str
+    further_questions: str | None
     route: RouteType
     task_type: TaskType
     clarify_message: str | None
 
+### UTILS ###
+
+def unique_chunks(results: list[dict]) -> list[dict]:
+    """Filter unique chunks of given wiki article with the highest rank_score"""
+    unique_map: dict = {}
+
+    for item in results:
+        key = (item["source_id"], item["chunk_id"])
+
+        current_score = item.get("rank_score", -float("inf"))
+        if key not in unique_map or current_score > unique_map[key].get(
+            "rank_score", -float("inf")
+        ):
+            unique_map[key] = item
+    return sorted(unique_map.values(), key=lambda x: x["rank_score"], reverse=True)
+
+
+def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
+    """Query for LLM containing found wiki chunks and also primary question"""
+    if not sorted_chunks:
+        return "Brak dostępnego kontekstu."
+
+    blocks = []
+    current_block = {
+        "source_id": sorted_chunks[0]["source_id"],
+        "source_title": sorted_chunks[0]["source_title"],
+        "last_chunk_id": sorted_chunks[0]["chunk_id"],
+        "text": sorted_chunks[0]["chunk_text"],
+    }
+
+    for i in range(1, len(sorted_chunks)):
+        next_chunk = sorted_chunks[i]
+
+        is_same_doc = next_chunk["source_id"] == current_block["source_id"]
+        is_sequential = next_chunk["chunk_id"] == current_block["last_chunk_id"] + 1
+
+        if is_same_doc and is_sequential:
+            current_block["text"] += " " + next_chunk["chunk_text"]
+            current_block["last_chunk_id"] = next_chunk["chunk_id"]
+        else:
+            blocks.append(current_block)
+            current_block = {
+                "source_id": next_chunk["source_id"],
+                "source_title": next_chunk["source_title"],
+                "last_chunk_id": next_chunk["chunk_id"],
+                "text": next_chunk["chunk_text"],
+            }
+
+    blocks.append(current_block)
+
+    xml_output = "<context>\n"
+    for block in blocks:
+        xml_output += (
+            f'  <document id="{block["source_id"]}" title="{block["source_title"]}">\n'
+            f"    {block['text'].strip()}\n"
+            f"  </document>\n"
+        )
+    xml_output += "</context>"
+
+    xml_output += f"\n\n<question>{question}</question>"
+
+    return xml_output
+
+### TOOLS ###
 
 @tool
 def add(a: float, b: float) -> float:
@@ -85,7 +151,11 @@ def absolute_value(a: float) -> float:
 
 math_tools = [add, subtract, multiply, divide, power, square_root, absolute_value]
 
+### NODES ###
+
 def router_node(state: AgentState, config: RunnableConfig) -> dict:
+    logger.info("router_node")
+    logger.info(state)
     last_message = state["messages"][-1].content
 
     instructor_client = config.get("configurable", {}).get("instructor_client")
@@ -98,15 +168,14 @@ def router_node(state: AgentState, config: RunnableConfig) -> dict:
         "current_query": last_message,
         "route": decision.route_type,
         "clarify_message": decision.clarify_message,
+        "task_type": decision.task_type,
     }
 
 
-def rag_search_node(state: AgentState) -> dict:
-    return {}
-
 
 def direct_node(state: AgentState, config: RunnableConfig) -> dict:
-
+    logger.info("direct")
+    logger.info(state)
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
         raise ValueError("Could not find instructor_client")
@@ -129,10 +198,14 @@ def direct_node(state: AgentState, config: RunnableConfig) -> dict:
 
 
 def clarify_node(state: AgentState) -> dict:
+    logger.info("clarify")
+    logger.info(state)
     return {"messages": [AIMessage(content=state["clarify_message"])]}
 
 
 def math_node(state: AgentState, config: RunnableConfig) -> dict:
+    logger.info("math")
+    logger.info(state)
     current_query = state["current_query"]
     
     langchain_client = config.get("configurable", {}).get("langchain_client")
@@ -140,13 +213,19 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
         raise ValueError("Could not find langchain client")
 
     math_langchain_client = langchain_client.bind_tools(math_tools)
-    
+    logger.info("after bind tools")
 
     system_prompt = SystemMessage(
         content=MATH_SYSTEM_PROMPT
     )
+    logger.info('system prompt')
     
-    response = math_langchain_client.invoke([system_prompt, {"role": "user", "content": current_query}])
+    response = math_langchain_client.invoke([
+        system_prompt, 
+        HumanMessage(content=current_query)
+    ])
+
+    logger.info("after invoke")
     
     if response.tool_calls:
         tool_call = response.tool_calls[0]
@@ -180,16 +259,77 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
 
 
 def route_condition(state: AgentState) -> str:
-    return state["route"]
-
-def task_type_condition(state: AgentState) -> str:
-    return state["task_type"]
+    route = state.get("route")
+    
+    if route == RouteType.RAG_SEARCH:
+        task = state.get("task_type")
+        if task == TaskType.LOOKUP:
+            return "lookup"
+        elif task == TaskType.COMPARE:
+            return "compare"
+        elif task == TaskType.SUMMARIZE:
+            return "summarize"
+        else:
+            return "lookup"
+            
+    elif route == RouteType.DIRECT:
+        return "direct"
+    elif route == RouteType.CLARIFY:
+        return "clarify"
+    elif route == RouteType.MATH:
+        return "math"
+        
+    return "direct"
 
 
 def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
-    # standardowo szerokie zapytanie do bazy RAG z n-1, n+1
+    logger.info("lookup")
+    logger.info(state)
+    weaviate_client = config.get("configurable", {}).get("weaviate_client")
+    if not weaviate_client:
+        raise ValueError("Could not find weaviate client")
+    
+    instructor_client = config.get("configurable", {}).get("instructor_client")
+    if not instructor_client:
+        raise ValueError("Could not find instructor_client")
+    
+    nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
+    if not nlp_toolkit:
+        raise ValueError("Could not find nlp_toolkit")
+    
+    
+    current_query = state['current_query']
+    decision = process_query(instructor_client, current_query, "llama3.2")
+
+    all_queries = [current_query] + decision.queries
+
+    basic_chunks = []
+    for query_text in all_queries:
+        query_results = weaviate_client.single_wikichunk_hybrid_fetch(
+            query_text, 8, 0.5
+        )
+        scores = nlp_toolkit.rank(
+            query_text, [elem["chunk_text"] for elem in query_results]
+        )
+        for score, elem in zip(scores, query_results, strict=True):
+            elem["rank_score"] = score
+        basic_chunks.extend(query_results)
+    basic_chunks = unique_chunks(basic_chunks)
+
+    basic_chunks = basic_chunks[:8]
+
+    sorted_chunks = sorted(
+        basic_chunks, key=lambda x: (x["source_id"], x["chunk_id"])
+    )
+
+    context_for_llm = prepare_context_for_llm(sorted_chunks, current_query)
+
+    lookup_decision = lookup_query(instructor_client, context_for_llm, "llama3.2")
+
     return {
-        "messages": [AIMessage(content="rag search")]
+        "messages": [AIMessage(content=lookup_decision.answer)],
+        "answer": lookup_decision.answer,
+        "further_questions": lookup_decision.further_questions,
     }
 
 def compare_node(state: AgentState, config: RunnableConfig) -> dict:
@@ -211,7 +351,6 @@ def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
 graph = StateGraph(AgentState)
 
 graph.add_node("router", router_node)
-graph.add_node("rag_search", rag_search_node)
 graph.add_node("direct", direct_node)
 graph.add_node("clarify", clarify_node)
 graph.add_node("math", math_node)
@@ -226,22 +365,15 @@ graph.add_conditional_edges(
     "router",
     route_condition,
     {
-        RouteType.RAG_SEARCH: "rag_search",
-        RouteType.DIRECT: "direct",
-        RouteType.CLARIFY: "clarify",
-        RouteType.MATH: "math",
+        "lookup": "lookup",
+        "compare": "compare",
+        "summarize": "summarize",
+        "direct": "direct",
+        "clarify": "clarify",
+        "math": "math",
     },
 )
 
-graph.add_conditional_edges(
-    "rag_search",
-    task_type_condition,
-    {
-        TaskType.LOOKUP: "lookup",
-        TaskType.COMPARE: "compare",
-        TaskType.SUMMARIZE: "summarize",
-    }
-)
 
 graph.add_edge("direct", END)
 graph.add_edge("clarify", END)
