@@ -2,6 +2,7 @@ from typing import TypedDict, Annotated, List
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AnyMessage
 import logging
+import random
 import math
 import instructor
 from instructor.core.client import Instructor
@@ -41,7 +42,6 @@ class AgentState(TypedDict):
     route: RouteType
     task_type: TaskType
     clarify_message: str | None
-    knows_answer: bool | None
 
 
 @tool
@@ -95,16 +95,14 @@ def router_node(state: AgentState, config: RunnableConfig) -> dict:
     decision = create_plan(instructor_client, last_message, "llama3.2")
 
     return {
-        "user_query": last_message,
+        "current_query": last_message,
         "route": decision.route_type,
         "clarify_message": decision.clarify_message,
     }
 
 
-def rag_search_node(state: AgentState, config: RunnableConfig) -> dict:
-    return {
-        "messages": [AIMessage(content="rag search")]
-    }
+def rag_search_node(state: AgentState) -> dict:
+    return {}
 
 
 def direct_node(state: AgentState, config: RunnableConfig) -> dict:
@@ -116,12 +114,21 @@ def direct_node(state: AgentState, config: RunnableConfig) -> dict:
     current_query = state["current_query"]
     
     decision = direct_query(instructor_client, current_query, "llama3.2")
+    if decision.knows_answer == True:
 
-    return {"messages": [AIMessage(content=decision.answer)],
-            "knows_answer":decision.knows_answer}
+        return {"messages": [AIMessage(content=decision.answer)]}
+    else:
+        answers = ["Przykro mi, lecz nie dysponuję informacjami pozwalającymi odpowiedzieć na to pytanie.",
+                   "Chciałbym pomóc, ale to zagadnienie wykracza poza zakres mojej wiedzy.",
+                   "Niestety, nie znam odpowiedzi na ten temat.",
+                   "Nie posiadam danych na ten temat, ale mogę spróbować pomóc w innej kwestii.",
+                   "Tym razem nie będę w stanie udzielić wyjaśnień.",
+                   "Niestety, nie jestem w stanie udzielić odpowiedzi na to pytanie.",]
+
+        return {"messages": [AIMessage(content=random.choice(answers))]}
 
 
-def clarify_node(state: AgentState, config: RunnableConfig) -> dict:
+def clarify_node(state: AgentState) -> dict:
     return {"messages": [AIMessage(content=state["clarify_message"])]}
 
 
@@ -150,9 +157,20 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
         tools_map = {t.name: t for t in math_tools}
         selected_tool = tools_map[tool_name]
         
+        answers = [
+            "Wynik to: ",
+            "Obliczona wartość wynosi: ",
+            "Rezultat obliczeń: ",
+            "Po przeliczeniu otrzymano wynik: ",
+            "Końcowa wartość to: ",
+            "Uzyskany rezultat wynosi: ",
+            "System wygenerował wynik: ",
+            "Wynik: "
+        ]
+
         try:
             result = selected_tool.invoke(tool_args)
-            final_content = f"Wykonano operację: {tool_name}. Wynik: {result}."
+            final_content = random.choice(answers) + str(result)
         except Exception as e:
             final_content = f"Błąd podczas obliczeń matematycznych: {str(e)}"
     else:
@@ -164,7 +182,28 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
 def route_condition(state: AgentState) -> str:
     return state["route"]
 
+def task_type_condition(state: AgentState) -> str:
+    return state["task_type"]
 
+
+def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
+    # standardowo szerokie zapytanie do bazy RAG z n-1, n+1
+    return {
+        "messages": [AIMessage(content="rag search")]
+    }
+
+def compare_node(state: AgentState, config: RunnableConfig) -> dict:
+    # wyszukiwanie encji oraz ich wspólnego mianownika do porównania
+    # następnie tyle wyszukań w bazie RAG ile udało znaleźć się encji (ale dosyć wąskich wyszukiwań bez n-1, n+1)
+    return {
+        "messages": [AIMessage(content="rag search")]
+    }
+
+def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
+    # wyszukuje szeroki kontekst dla zadanego tematu i zwraca streszczenie (tutaj przyda się n-1, n+1 chunk)
+    return {
+        "messages": [AIMessage(content="rag search")]
+    }
 
 
 
@@ -176,6 +215,10 @@ graph.add_node("rag_search", rag_search_node)
 graph.add_node("direct", direct_node)
 graph.add_node("clarify", clarify_node)
 graph.add_node("math", math_node)
+graph.add_node("lookup", lookup_node)
+graph.add_node("compare", compare_node)
+graph.add_node("summarize", summarize_node)
+
 
 graph.set_entry_point("router")
 
@@ -190,10 +233,22 @@ graph.add_conditional_edges(
     },
 )
 
-graph.add_edge("rag_search", END)
+graph.add_conditional_edges(
+    "rag_search",
+    task_type_condition,
+    {
+        TaskType.LOOKUP: "lookup",
+        TaskType.COMPARE: "compare",
+        TaskType.SUMMARIZE: "summarize",
+    }
+)
+
 graph.add_edge("direct", END)
 graph.add_edge("clarify", END)
 graph.add_edge("math", END)
+graph.add_edge("lookup", END)
+graph.add_edge("compare", END)
+graph.add_edge("summarize", END)
 
 
 agent = graph.compile()

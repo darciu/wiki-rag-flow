@@ -10,6 +10,37 @@ from weaviate.collections import Collection
 from weaviate.util import generate_uuid5
 
 
+import requests
+from typing import Any, List
+from llama_index.core.embeddings import BaseEmbedding
+
+class NativeEmbedding(BaseEmbedding):
+    url: str = "http://localhost:8008/embed"
+
+    def __init__(self, native_embedding_url: str = "http://localhost:8008/embed", **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.url = native_embedding_url
+
+    def _get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Call the native (bare-metal) embedding service.
+        """
+        try:
+            r = requests.post(
+                self.url,
+                json={"texts": texts, "normalize": True},
+                timeout=120,
+            )
+            r.raise_for_status()
+            return r.json()["vectors"]
+        except requests.RequestException as e:
+            print(f"Error while requesting service: {e}")
+            raise e
+        
+
+    def _get_text_embedding(self, text: str) -> List[float]:
+        return self._get_text_embeddings([text])[0]
+
 class WeaviateManager:
     def __init__(
         self,
@@ -19,7 +50,6 @@ class WeaviateManager:
         port: int = 8080,
         grpc_port: int = 50051,
     ):
-        self.native_embedding_url = native_embedding_url
         self.client = weaviate.connect_to_custom(
             http_host=host,
             http_port=port,
@@ -29,6 +59,7 @@ class WeaviateManager:
             grpc_secure=False,
             auth_credentials=Auth.api_key(api_key),
         )
+        self.embedder = NativeEmbedding(native_embedding_url)
 
     def __enter__(self):
         """
@@ -174,21 +205,6 @@ class WeaviateManager:
         collection = self.client.collections.get(collection_name)
         return collection
 
-    def embed_batch_natively(self, texts: list[str]) -> list[list[float]]:
-        """
-        Call the native (bare-metal) embedding service.
-        """
-        try:
-            r = requests.post(
-                self.native_embedding_url,
-                json={"texts": texts, "normalize": True},
-                timeout=120,
-            )
-            r.raise_for_status()
-            return r.json()["vectors"]
-        except requests.RequestException as e:
-            print(f"Error connecting to embedding service: {e}")
-            raise e
 
     def build_embedding_input_wiki_chunk(self, item: dict) -> str:
         """
@@ -220,7 +236,8 @@ class WeaviateManager:
             print("No items to process.")
             return
         texts = [self.build_embedding_input_wiki_chunk(item) for item in data_items]
-        vectors = self.embed_batch_natively(texts)
+        
+        vectors = self.embedder._get_text_embeddings(texts)
 
         collection = self.create_wiki_chunk_collection()
 
@@ -249,9 +266,9 @@ class WeaviateManager:
         self.client.collections.delete(collection_name)
 
     def single_wikichunk_hybrid_fetch(
-        self, query_text, query_vector, weaviate_limit, alpha
-    ):
-
+        self, query_text, weaviate_limit, alpha
+    ):  
+        query_vector = self.embedder._get_text_embedding([query_text])
         collection_name = "WikiChunk"
         collection = self.client.collections.get(collection_name)
         response = collection.query.hybrid(
