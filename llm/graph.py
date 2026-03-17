@@ -154,8 +154,6 @@ math_tools = [add, subtract, multiply, divide, power, square_root, absolute_valu
 ### NODES ###
 
 def router_node(state: AgentState, config: RunnableConfig) -> dict:
-    logger.info("router_node")
-    logger.info(state)
     last_message = state["messages"][-1].content
 
     instructor_client = config.get("configurable", {}).get("instructor_client")
@@ -174,8 +172,6 @@ def router_node(state: AgentState, config: RunnableConfig) -> dict:
 
 
 def direct_node(state: AgentState, config: RunnableConfig) -> dict:
-    logger.info("direct")
-    logger.info(state)
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
         raise ValueError("Could not find instructor_client")
@@ -198,14 +194,10 @@ def direct_node(state: AgentState, config: RunnableConfig) -> dict:
 
 
 def clarify_node(state: AgentState) -> dict:
-    logger.info("clarify")
-    logger.info(state)
     return {"messages": [AIMessage(content=state["clarify_message"])]}
 
 
 def math_node(state: AgentState, config: RunnableConfig) -> dict:
-    logger.info("math")
-    logger.info(state)
     current_query = state["current_query"]
     
     langchain_client = config.get("configurable", {}).get("langchain_client")
@@ -213,19 +205,16 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
         raise ValueError("Could not find langchain client")
 
     math_langchain_client = langchain_client.bind_tools(math_tools)
-    logger.info("after bind tools")
 
     system_prompt = SystemMessage(
         content=MATH_SYSTEM_PROMPT
     )
-    logger.info('system prompt')
     
     response = math_langchain_client.invoke([
         system_prompt, 
         HumanMessage(content=current_query)
     ])
 
-    logger.info("after invoke")
     
     if response.tool_calls:
         tool_call = response.tool_calls[0]
@@ -283,8 +272,6 @@ def route_condition(state: AgentState) -> str:
 
 
 def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
-    logger.info("lookup")
-    logger.info(state)
     weaviate_client = config.get("configurable", {}).get("weaviate_client")
     if not weaviate_client:
         raise ValueError("Could not find weaviate client")

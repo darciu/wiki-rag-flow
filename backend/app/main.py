@@ -170,7 +170,7 @@ def chat(
         result_agent_state = agent.invoke(initial_state, config=config)
         answer = result_agent_state["messages"][-1].content
         route_type = result_agent_state.get("route")
-        suggested_questions = result_agent_state.get('further_questions')
+        suggested_questions = result_agent_state.get('further_questions',[])
 
 
         session_id = request.cookies.get("session_id")
