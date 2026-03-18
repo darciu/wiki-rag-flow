@@ -6,7 +6,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, model_validator
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
-from llm.prompts import PLANNER_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, PROCESS_SYSTEM_PROMPT, LOOKUP_SYSTEM_PROMPT
+from llm.prompts import PLANNER_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, PROCESS_SYSTEM_PROMPT, LOOKUP_SYSTEM_PROMPT, COMPARE_SYSTEM_PROMPT
 import instructor
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
@@ -97,6 +97,54 @@ class LookupQuery(BaseModel):
         description="List of one or two questions generated from the given <context>, other than <question>."
     )
 
+
+class SummarizeQuery(BaseModel):
+    summary: str = Field(
+        description="Summary of given text."
+    )
+    further_questions: List[str] = Field(
+        description="List of one or two questions generated from the given <context>, other than <question>."
+    )
+
+def build_search_queries(entities, comparison_aspects):
+    search_queries = []
+    if comparison_aspects:
+        aspects = " ".join(comparison_aspects)
+    else:
+        aspects = ""
+    
+    for entity in entities:
+        search_queries.append(entity+ " " + aspects)
+    search_queries.append(", ".join(entities) + " " + aspects)
+    return search_queries
+
+class QueryCompare(BaseModel):
+
+    entities: list[str] = Field(
+        min_length=2,
+        description="Lista encji występujących w tekście użytkownika. Encje zwracaj w formie podstawowej."
+    )
+
+    comparison_aspects: list[str] = Field(default_factory=list, description="Kryterium porównywania wymienionych przez użytkownika encji.")
+
+    search_queries: list[str] = Field(default_factory=list)
+
+
+    @model_validator(mode="after")
+    def validate_consistency(self):
+        if len(self.entities) < 2:
+            raise ValueError("entities must be at least two items or more")
+        
+        return self
+    
+    @model_validator(mode="after")
+    def generate_search_queries(self):
+        if not self.search_queries:
+            self.search_queries = build_search_queries(
+                entities=self.entities,
+                comparison_aspects=self.comparison_aspects,
+            )
+
 def create_plan(llm_client: Instructor, question: str, model_name: str) -> QueryPlanner:
 
     try:
@@ -186,4 +234,50 @@ def lookup_query(client: Instructor, context: str, model_name: str) -> LookupQue
         return LookupQuery(
             is_found=False,
             answer="Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.",
+        )
+    
+
+def summarize_query(client: Instructor, context: str, model_name: str) -> SummarizeQuery:
+    try:
+        system_prompt = LOOKUP_SYSTEM_PROMPT
+
+        decision = client.chat.completions.create(
+            model=model_name,
+            response_model=SummarizeQuery,
+            max_retries=3,
+            temperature=0.0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context},
+            ],
+        )
+        return decision
+    except InstructorRetryException as e:
+        logger.info(
+            f"Warning! Model could not generate reply after {e.n_attempts} retires."
+        )
+
+        return SummarizeQuery(
+            is_found=False,
+            answer="Nie udało mi się podsumować danej kwestii.",
+        )
+    
+
+
+def compare(llm_client: Instructor, question: str, model_name: str) -> QueryCompare:
+
+    try:
+        return llm_client.chat.completions.create(
+            model=model_name,
+            response_model=QueryCompare,
+            max_retries=3,
+            temperature=0.1,
+            messages=[
+                {"role": "system", "content": COMPARE_SYSTEM_PROMPT},
+                {"role": "user", "content": question},
+            ],
+        )
+    except InstructorRetryException as e:
+        print(
+            f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )

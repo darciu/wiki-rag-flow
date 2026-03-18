@@ -20,6 +20,7 @@ from langchain_core.messages import (
     ToolMessage,
     SystemMessage,
 )
+from collections import defaultdict
 from langchain_core.tools import tool
 from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
@@ -27,7 +28,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AIMessage
-from llm.routing import create_plan, direct_query, process_query, lookup_query
+from llm.routing import create_plan, direct_query, process_query, lookup_query, summarize_query
 from llm.routing import RouteType, TaskType
 from llm.prompts import MATH_SYSTEM_PROMPT
 logging.basicConfig(
@@ -107,6 +108,26 @@ def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
     xml_output += f"\n\n<question>{question}</question>"
 
     return xml_output
+
+def get_neighbour_context_keys(results: list[dict]) -> list[tuple[str, int]]:
+    """For given list of wiki article chunks, get also N-1 and N+1 chunks that do not overlap with existing ones"""
+    existing_keys = {(res["source_id"], res["chunk_id"]) for res in results}
+    missing_keys = set()
+
+    for res in results:
+        s_id = res["source_id"]
+        c_id = res["chunk_id"]
+
+        if c_id - 1 >= 0:
+            prev_key = (s_id, c_id - 1)
+            if prev_key not in existing_keys:
+                missing_keys.add(prev_key)
+
+        next_key = (s_id, c_id + 1)
+        if next_key not in existing_keys:
+            missing_keys.add(next_key)
+
+    return list(missing_keys)
 
 ### TOOLS ###
 
@@ -303,7 +324,7 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
         basic_chunks.extend(query_results)
     basic_chunks = unique_chunks(basic_chunks)
 
-    basic_chunks = basic_chunks[:8]
+    basic_chunks = basic_chunks[:10]
 
     sorted_chunks = sorted(
         basic_chunks, key=lambda x: (x["source_id"], x["chunk_id"])
@@ -320,16 +341,69 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
     }
 
 def compare_node(state: AgentState, config: RunnableConfig) -> dict:
-    # wyszukiwanie encji oraz ich wspólnego mianownika do porównania
-    # następnie tyle wyszukań w bazie RAG ile udało znaleźć się encji (ale dosyć wąskich wyszukiwań bez n-1, n+1)
+    
+    
+
+
     return {
         "messages": [AIMessage(content="rag search")]
     }
 
 def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
     # wyszukuje szeroki kontekst dla zadanego tematu i zwraca streszczenie (tutaj przyda się n-1, n+1 chunk)
+
+    weaviate_client = config.get("configurable", {}).get("weaviate_client")
+    if not weaviate_client:
+        raise ValueError("Could not find weaviate client")
+    
+    instructor_client = config.get("configurable", {}).get("instructor_client")
+    if not instructor_client:
+        raise ValueError("Could not find instructor_client")
+    
+    nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
+    if not nlp_toolkit:
+        raise ValueError("Could not find nlp_toolkit")
+    
+    current_query = state['current_query']
+    decision = process_query(instructor_client, current_query, "llama3.2")
+
+    all_queries = [current_query] + decision.queries
+
+    basic_chunks = []
+    for query_text in all_queries:
+        query_results = weaviate_client.single_wikichunk_hybrid_fetch(
+            query_text, 8, 0.5
+        )
+        scores = nlp_toolkit.rank(
+            query_text, [elem["chunk_text"] for elem in query_results]
+        )
+        for score, elem in zip(scores, query_results, strict=True):
+            elem["rank_score"] = score
+        basic_chunks.extend(query_results)
+    basic_chunks = unique_chunks(basic_chunks)
+
+    basic_chunks = basic_chunks[:4]
+
+    missing_keys = get_neighbour_context_keys(basic_chunks)
+    grouped_source_chunk_id = defaultdict(list)
+    for s_id, c_id in missing_keys:
+        grouped_source_chunk_id[s_id].append(c_id)
+
+    extended_chunks = weaviate_client.batch_wikichunk_fetch(grouped_source_chunk_id)
+
+    sorted_chunks = sorted(
+        extended_chunks, key=lambda x: (x["source_id"], x["chunk_id"])
+    )
+
+    context_for_llm = prepare_context_for_llm(sorted_chunks, current_query)
+
+    summarize_decision = summarize_query(instructor_client, context_for_llm, "llama3.2")
+    
+
     return {
-        "messages": [AIMessage(content="rag search")]
+        "messages": [AIMessage(content=summarize_decision.answer)],
+        "answer": summarize_decision.answer,
+        "further_questions": summarize_decision.further_questions,
     }
 
 
