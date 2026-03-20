@@ -6,7 +6,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, model_validator
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
-from llm.prompts import PLANNER_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, PROCESS_SYSTEM_PROMPT, LOOKUP_SYSTEM_PROMPT, COMPARE_SYSTEM_PROMPT
+from llm.prompts import PLANNER_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, PROCESS_SYSTEM_PROMPT, LOOKUP_SYSTEM_PROMPT, SUMMARIZE_SYSTEM_PROMPT, PRECOMPARE_SYSTEM_PROMPT, COMPARE_SYSTEM_PROMPT
 import instructor
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
@@ -118,24 +118,17 @@ def build_search_queries(entities, comparison_aspects):
     search_queries.append(", ".join(entities) + " " + aspects)
     return search_queries
 
-class QueryCompare(BaseModel):
+class PreQueryCompare(BaseModel):
 
     entities: list[str] = Field(
         min_length=2,
-        description="Lista encji występujących w tekście użytkownika. Encje zwracaj w formie podstawowej."
+        description="List of entities appearing in user text. Return entities in their base form."
     )
 
-    comparison_aspects: list[str] = Field(default_factory=list, description="Kryterium porównywania wymienionych przez użytkownika encji.")
+    comparison_aspects: list[str] = Field(default_factory=list, description="A criterion for comparing entities listed by the user.")
 
     search_queries: list[str] = Field(default_factory=list)
 
-
-    @model_validator(mode="after")
-    def validate_consistency(self):
-        if len(self.entities) < 2:
-            raise ValueError("entities must be at least two items or more")
-        
-        return self
     
     @model_validator(mode="after")
     def generate_search_queries(self):
@@ -144,6 +137,15 @@ class QueryCompare(BaseModel):
                 entities=self.entities,
                 comparison_aspects=self.comparison_aspects,
             )
+        return self
+
+class CompareQuery(BaseModel):
+    comparison: str = Field(
+        description="Compare <entities> using <context>. Focus on <aspects> if provided; otherwise, extract and compare main features."
+    )
+    further_questions: List[str] = Field(
+        description="List of one or two questions generated from the given <context>, other than <question>."
+    )
 
 def create_plan(llm_client: Instructor, question: str, model_name: str) -> QueryPlanner:
 
@@ -232,14 +234,14 @@ def lookup_query(client: Instructor, context: str, model_name: str) -> LookupQue
         )
 
         return LookupQuery(
-            is_found=False,
             answer="Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.",
+            further_questions = [],
         )
     
 
 def summarize_query(client: Instructor, context: str, model_name: str) -> SummarizeQuery:
     try:
-        system_prompt = LOOKUP_SYSTEM_PROMPT
+        system_prompt = SUMMARIZE_SYSTEM_PROMPT
 
         decision = client.chat.completions.create(
             model=model_name,
@@ -258,26 +260,52 @@ def summarize_query(client: Instructor, context: str, model_name: str) -> Summar
         )
 
         return SummarizeQuery(
-            is_found=False,
-            answer="Nie udało mi się podsumować danej kwestii.",
+            summary="Nie udało mi się podsumować danej kwestii.",
+            further_questions = [],
         )
     
 
 
-def compare(llm_client: Instructor, question: str, model_name: str) -> QueryCompare:
+def precompare_query(llm_client: Instructor, question: str, model_name: str) -> PreQueryCompare:
 
     try:
         return llm_client.chat.completions.create(
             model=model_name,
-            response_model=QueryCompare,
-            max_retries=3,
+            response_model=PreQueryCompare,
+            max_retries=5,
             temperature=0.1,
             messages=[
-                {"role": "system", "content": COMPARE_SYSTEM_PROMPT},
+                {"role": "system", "content": PRECOMPARE_SYSTEM_PROMPT},
                 {"role": "user", "content": question},
             ],
         )
     except InstructorRetryException as e:
         print(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
+        )
+
+
+def compare_query(client: Instructor, context: str, model_name: str) -> CompareQuery:
+    try:
+        system_prompt = COMPARE_SYSTEM_PROMPT
+
+        decision = client.chat.completions.create(
+            model=model_name,
+            response_model=CompareQuery,
+            max_retries=3,
+            temperature=0.0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context},
+            ],
+        )
+        return decision
+    except InstructorRetryException as e:
+        logger.info(
+            f"Warning! Model could not generate reply after {e.n_attempts} retires."
+        )
+
+        return CompareQuery(
+            comparison="Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.",
+            further_questions = [],
         )

@@ -28,7 +28,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AIMessage
-from llm.routing import create_plan, direct_query, process_query, lookup_query, summarize_query
+from llm.routing import create_plan, direct_query, process_query, lookup_query, summarize_query, precompare_query, compare_query
 from llm.routing import RouteType, TaskType
 from llm.prompts import MATH_SYSTEM_PROMPT
 logging.basicConfig(
@@ -80,7 +80,9 @@ def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
         next_chunk = sorted_chunks[i]
 
         is_same_doc = next_chunk["source_id"] == current_block["source_id"]
-        is_sequential = next_chunk["chunk_id"] == current_block["last_chunk_id"] + 1
+        is_sequential = False
+        if next_chunk.get("chunk_id") is not None and current_block.get("last_chunk_id") is not None:
+            is_sequential = next_chunk["chunk_id"] == current_block["last_chunk_id"] + 1
 
         if is_same_doc and is_sequential:
             current_block["text"] += " " + next_chunk["chunk_text"]
@@ -106,6 +108,73 @@ def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
     xml_output += "</context>"
 
     xml_output += f"\n\n<question>{question}</question>"
+
+    return xml_output
+
+def prepare_comparison_context_for_llm(
+    sorted_chunks: list[dict], 
+    question: str, 
+    entities: list[str], 
+    comparison_aspects: list[str]
+) -> str:
+
+
+    blocks = []
+    current_block = {
+        "source_id": sorted_chunks[0]["source_id"],
+        "source_title": sorted_chunks[0]["source_title"],
+        "last_chunk_id": sorted_chunks[0]["chunk_id"],
+        "text": sorted_chunks[0]["chunk_text"],
+    }
+
+    for i in range(1, len(sorted_chunks)):
+        next_chunk = sorted_chunks[i]
+
+        is_same_doc = next_chunk["source_id"] == current_block["source_id"]
+        is_sequential = False
+        if next_chunk.get("chunk_id") is not None and current_block.get("last_chunk_id") is not None:
+            is_sequential = next_chunk["chunk_id"] == current_block["last_chunk_id"] + 1
+
+        if is_same_doc and is_sequential:
+            current_block["text"] += " " + next_chunk["chunk_text"]
+            current_block["last_chunk_id"] = next_chunk["chunk_id"]
+        else:
+            blocks.append(current_block)
+            current_block = {
+                "source_id": next_chunk["source_id"],
+                "source_title": next_chunk["source_title"],
+                "last_chunk_id": next_chunk["chunk_id"],
+                "text": next_chunk["chunk_text"],
+            }
+
+    blocks.append(current_block)
+
+    xml_output = "<context>\n"
+    for block in blocks:
+        xml_output += (
+            f'  <document id="{block["source_id"]}" title="{block["source_title"]}">\n'
+            f"    {block['text'].strip()}\n"
+            f"  </document>\n"
+        )
+    xml_output += "</context>\n\n"
+
+    xml_output += "<comparison_meta>\n"
+    
+    if entities:
+        xml_output += "  <entities>\n"
+        for entity in entities:
+            xml_output += f"    <entity>{entity}</entity>\n"
+        xml_output += "  </entities>\n"
+    
+    if comparison_aspects:
+        xml_output += "  <aspects>\n"
+        for aspect in comparison_aspects:
+            xml_output += f"    <aspect>{aspect}</aspect>\n"
+        xml_output += "  </aspects>\n"
+        
+    xml_output += "</comparison_meta>\n\n"
+
+    xml_output += f"<question>{question}</question>"
 
     return xml_output
 
@@ -341,16 +410,54 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
     }
 
 def compare_node(state: AgentState, config: RunnableConfig) -> dict:
-    
-    
 
+    weaviate_client = config.get("configurable", {}).get("weaviate_client")
+    if not weaviate_client:
+        raise ValueError("Could not find weaviate client")
+    
+    instructor_client = config.get("configurable", {}).get("instructor_client")
+    if not instructor_client:
+        raise ValueError("Could not find instructor_client")
+    
+    nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
+    if not nlp_toolkit:
+        raise ValueError("Could not find nlp_toolkit")
+
+    
+    
+    current_query = state['current_query']
+    decision = precompare_query(instructor_client, current_query, "llama3.2")
+
+    logger.info(decision)
+
+    all_chunks = []
+    for query_text in decision.search_queries:
+        query_results = weaviate_client.single_wikichunk_hybrid_fetch(
+            query_text, 8, 0.5
+        )
+        scores = nlp_toolkit.rank(
+            query_text, [elem["chunk_text"] for elem in query_results]
+        )
+        for score, elem in zip(scores, query_results, strict=True):
+            elem["rank_score"] = score
+
+        all_chunks.extend(query_results[:3])
+    
+    sorted_chunks = sorted(
+        all_chunks, key=lambda x: (x["source_id"], x["chunk_id"])
+    )
+
+    context_for_llm = prepare_comparison_context_for_llm(sorted_chunks, current_query, decision.entities, decision.comparison_aspects)
+
+    compare_decision = compare_query(instructor_client, context_for_llm, "llama3.2")
 
     return {
-        "messages": [AIMessage(content="rag search")]
+        "messages": [AIMessage(content=compare_decision.comparison)],
+        "answer": compare_decision.comparison,
+        "further_questions": compare_decision.further_questions,
     }
 
 def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
-    # wyszukuje szeroki kontekst dla zadanego tematu i zwraca streszczenie (tutaj przyda się n-1, n+1 chunk)
 
     weaviate_client = config.get("configurable", {}).get("weaviate_client")
     if not weaviate_client:
@@ -401,8 +508,8 @@ def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
     
 
     return {
-        "messages": [AIMessage(content=summarize_decision.answer)],
-        "answer": summarize_decision.answer,
+        "messages": [AIMessage(content=summarize_decision.summary)],
+        "answer": summarize_decision.summary,
         "further_questions": summarize_decision.further_questions,
     }
 
