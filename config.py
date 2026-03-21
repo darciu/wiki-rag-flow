@@ -39,7 +39,7 @@ class ScraperSettings(BaseSettings):
 
 
 class OllamaSettings(BaseSettings):
-    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 
 class FrontendSettings(BaseSettings):

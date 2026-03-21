@@ -1,8 +1,14 @@
+import logging
 from contextlib import asynccontextmanager
+from typing import Any, cast
 from uuid import uuid4
 
 import instructor
+import requests
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_ollama import ChatOllama
 from openai import OpenAI
 
 from backend.app.schemas import (
@@ -13,21 +19,36 @@ from backend.app.schemas import (
 )
 from backend.db.weaviate.connection import WeaviateManager
 from config import OllamaSettings, WeaviateSettings
-from llm.interface import get_chat_response
+from llm.graph import agent
 from nlp.toolkit import NLPToolkit
 
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-def create_llm_client():
+
+def create_instructor_client():
     ollama_settings = OllamaSettings()
-    ollama_base_url = ollama_settings.OLLAMA_BASE_URL
+    ollama_base_url = ollama_settings.OLLAMA_BASE_URL + "/v1"
 
     raw = OpenAI(
         base_url=ollama_base_url,
         api_key="ollama",
         timeout=120.0,
     )
-    llm_client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
-    return raw, llm_client
+    instructor_client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
+    return raw, instructor_client
+
+
+def create_langchain_client():
+    ollama_settings = OllamaSettings()
+    ollama_base_url = ollama_settings.OLLAMA_BASE_URL
+
+    langchain_client = ChatOllama(
+        model="llama3.2", temperature=0.0, base_url=ollama_base_url
+    )
+    return langchain_client
 
 
 def create_weaviate_client():
@@ -63,13 +84,15 @@ def verify_clients(raw_openai_client, weaviate_client, nlp_toolkit) -> None:
 async def lifespan(app: FastAPI):
     # STARTUP
 
-    raw, llm_client = create_llm_client()
+    raw_instructor, instructor_client = create_instructor_client()
+    langchain_client = create_langchain_client()
     weaviate_client = create_weaviate_client()
     nlp_toolkit = NLPToolkit()
 
-    verify_clients(raw, weaviate_client, nlp_toolkit)
+    verify_clients(raw_instructor, weaviate_client, nlp_toolkit)
 
-    app.state.llm_client = llm_client
+    app.state.instructor_client = instructor_client
+    app.state.langchain_client = langchain_client
     app.state.weaviate_client = weaviate_client
     app.state.nlp_toolkit = nlp_toolkit
     app.state.chat_last_session = None
@@ -83,12 +106,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="WIKI RAG", version="0.1.0", lifespan=lifespan)
 
 
-def get_llm_client(request: Request):
+def get_instructor_client(request: Request):
     try:
-        return request.app.state.llm_client
+        return request.app.state.instructor_client
     except AttributeError as err:
         raise HTTPException(
-            status_code=503, detail="LLM client not initialized"
+            status_code=503, detail="Instructor client not initialized"
+        ) from err
+
+
+def get_langchain_client(request: Request):
+    try:
+        return request.app.state.langchain_client
+    except AttributeError as err:
+        raise HTTPException(
+            status_code=503, detail="Langchain client not initialized"
         ) from err
 
 
@@ -115,36 +147,89 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/models")
+def get_installed_models():
+    try:
+        ollama_settings = OllamaSettings()
+        ollama_base_url = ollama_settings.OLLAMA_BASE_URL
+
+        response = requests.get(f"{ollama_base_url}/api/tags", timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        # only LLMs
+        llm_models = []
+        for model in data.get("models", []):
+            name = model.get("name", "").lower()
+            details = model.get("details", {})
+
+            family = details.get("family", "").lower()
+            families = [f.lower() for f in (details.get("families") or [])]
+
+            if (
+                "bert" in family
+                or "nomic-bert" in family
+                or any("bert" in f for f in families)
+            ):
+                continue
+
+            if "embed" in name or "bge" in name or "minilm" in name:
+                continue
+
+            llm_models.append(model["name"])
+
+        if not llm_models:
+            llm_models = ["llama3.2"]
+
+        return {"models": llm_models}
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Ollama: {e}")
+        return {"models": ["llama3.2"]}
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(
-    chat_reqest: ChatRequest,
+    chat_request: ChatRequest,
     request: Request,
     response: Response,
-    llm_client=Depends(get_llm_client),  # noqa: B008
+    instructor_client=Depends(get_instructor_client),  # noqa: B008
+    langchain_client=Depends(get_langchain_client),  # noqa: B008
     weaviate_client=Depends(get_weaviate_client),  # noqa: B008
     nlp_toolkit=Depends(get_nlp_toolkit),  # noqa: B008
 ):
     try:
-        model_name = chat_reqest.model_name
-        response_id = uuid4()
-
-        answer, suggested_questions, route_type = get_chat_response(
-            question=chat_reqest.question,
-            llm_client=llm_client,
-            weaviate_client=weaviate_client,
-            nlp_toolkit=nlp_toolkit,
-            model_name=model_name,
-        )
-
         session_id = request.cookies.get("session_id")
         if not session_id:
             session_id = str(uuid4())
             response.set_cookie(key="session_id", value=session_id, httponly=True)
+        model_name = chat_request.model_name
+        response_id = uuid4()
+
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": session_id,
+                "model_name": model_name,
+                "instructor_client": instructor_client,
+                "weaviate_client": weaviate_client,
+                "nlp_toolkit": nlp_toolkit,
+                "langchain_client": langchain_client,
+            }
+        }
+
+        initial_state = {
+            "messages": [HumanMessage(content=chat_request.question)],
+            "current_query": chat_request.question,
+        }
+
+        result_agent_state = agent.invoke(cast(Any, initial_state), config=config)
+
+        answer = result_agent_state["messages"][-1].content
+        suggested_questions = result_agent_state.get("further_questions", [])
 
         chat_response = ChatResponse(
             answer=answer,
             suggested_prompts=suggested_questions,
-            route=route_type,
             id=response_id,
             user_agent=request.headers.get("user-agent"),
             session_id=session_id,
@@ -154,7 +239,6 @@ def chat(
         # for feedback
         request.app.state.chat_last_session = {
             "chat_response_id": response_id,
-            "chat_route": route_type,
         }
 
         return chat_response

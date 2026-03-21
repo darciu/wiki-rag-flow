@@ -8,6 +8,7 @@ FASTAPI_BACKEND_URL = frontend_settings.FASTAPI_BACKEND_URL
 
 API_CHAT_URL = f"{FASTAPI_BACKEND_URL}/chat"
 API_FEEDBACK_URL = f"{FASTAPI_BACKEND_URL}/feedback"
+API_MODELS_URL = f"{FASTAPI_BACKEND_URL}/models"
 
 st.set_page_config(page_title="WIKI RAG - Chat", layout="wide")
 
@@ -67,6 +68,23 @@ if "feedback_sent" not in st.session_state:
 
 if "http" not in st.session_state:
     st.session_state.http = requests.Session()
+
+
+@st.cache_data(ttl=60)  # Odświeżaj listę co 60 sekund
+def fetch_available_models():
+    try:
+        r = requests.get(API_MODELS_URL, timeout=5)
+        r.raise_for_status()
+        return r.json().get("models", ["llama3.2"])
+    except Exception as e:
+        st.sidebar.error(f"Błąd pobierania modeli: {e}")
+        return ["llama3.2"]
+
+
+available_models = fetch_available_models()
+
+if st.session_state.model_name not in available_models:
+    st.session_state.model_name = available_models[0]
 
 
 def render_history_text(history):
@@ -177,7 +195,7 @@ with left:
 with right:
     st.selectbox(
         "Model",
-        options=["llama3.2"],
+        options=available_models,
         key="model_name",
     )
 
