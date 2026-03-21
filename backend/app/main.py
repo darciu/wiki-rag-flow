@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, cast
 from uuid import uuid4
@@ -10,6 +11,12 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_ollama import ChatOllama
 from openai import OpenAI
+from openinference.instrumentation.langchain import LangChainInstrumentor
+from openinference.instrumentation.openai import OpenAIInstrumentor
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from backend.app.schemas import (
     ChatRequest,
@@ -35,7 +42,7 @@ def create_instructor_client():
     raw = OpenAI(
         base_url=ollama_base_url,
         api_key="ollama",
-        timeout=120.0,
+        timeout=30.0,
     )
     instructor_client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
     return raw, instructor_client
@@ -80,9 +87,31 @@ def verify_clients(raw_openai_client, weaviate_client, nlp_toolkit) -> None:
         raise RuntimeError("NLPToolkit is not initialized")
 
 
+def setup_phoenix_tracing():
+    # Pobieramy endpoint z env (skonfigurowany w docker-compose)
+    # Zapasowo kierujemy na localhost dla uruchomień lokalnych bez dockera
+    endpoint = os.getenv(
+        "PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces"
+    )
+
+    tracer_provider = TracerProvider()
+    tracer_provider.add_span_processor(
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint))
+    )
+    trace.set_tracer_provider(tracer_provider)
+
+    # Automatyczna instrumentacja bibliotek, których używasz
+    LangChainInstrumentor().instrument()
+    OpenAIInstrumentor().instrument()
+
+    logger.info(f"Phoenix tracing initialized. Sending traces to: {endpoint}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # STARTUP
+
+    setup_phoenix_tracing()
 
     raw_instructor, instructor_client = create_instructor_client()
     langchain_client = create_langchain_client()
@@ -189,7 +218,7 @@ def get_installed_models():
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(
+async def chat(
     chat_request: ChatRequest,
     request: Request,
     response: Response,

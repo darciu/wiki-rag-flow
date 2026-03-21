@@ -70,7 +70,7 @@ if "http" not in st.session_state:
     st.session_state.http = requests.Session()
 
 
-@st.cache_data(ttl=60)  # Odświeżaj listę co 60 sekund
+@st.cache_data(ttl=20)
 def fetch_available_models():
     try:
         r = requests.get(API_MODELS_URL, timeout=5)

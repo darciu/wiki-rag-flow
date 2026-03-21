@@ -79,8 +79,11 @@ ollama-stop:
 ollama-pull-llama: ollama-up
 	ollama pull llama3.2
 
+ollama-pull-gemma: ollama-up
+	ollama pull gemma3:4b
+
 ollama-pull-qwen: ollama-up
-	ollama pull qwen:4b
+	ollama pull qwen2.5:7b-instruct
 
 ollama-health:
 	@curl -fsS "http://localhost:11434/api/tags" > /dev/null && echo "Ollama is Healthy" || (echo "Ollama is NOT running"; exit 1)

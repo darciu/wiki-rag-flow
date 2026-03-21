@@ -79,10 +79,13 @@ services:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - WEAVIATE_HOST=weaviate
       - EMBEDDING_SERVER_URL=http://host.docker.internal:8008/embed
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       weaviate:
+        condition: service_healthy
+      phoenix:
         condition: service_healthy
 
   frontend:
@@ -95,6 +98,20 @@ services:
       - FASTAPI_BACKEND_URL=http://fastapi-backend:8000
     depends_on:
       - fastapi-backend
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: local_phoenix
+    ports:
+      - "6006:6006"
+      - "4317:4317"
+    restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6006/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 
   scraper:
