@@ -1,21 +1,17 @@
 from types import TracebackType
-from typing import Any
+from typing import Any, cast
 
 import requests
 import weaviate
 import weaviate.classes.config as wc
 import weaviate.classes.query as wq
+from llama_index.core import VectorStoreIndex
+from llama_index.core.embeddings import BaseEmbedding
+from llama_index.core.vector_stores.types import VectorStoreQueryMode
+from llama_index.vector_stores.weaviate import WeaviateVectorStore
 from weaviate.classes.init import Auth
 from weaviate.collections import Collection
 from weaviate.util import generate_uuid5
-
-
-import requests
-from typing import Any, List
-from llama_index.core.embeddings import BaseEmbedding
-from llama_index.vector_stores.weaviate import WeaviateVectorStore
-from llama_index.core import VectorStoreIndex
-from llama_index.core.vector_stores.types import VectorStoreQueryMode
 
 
 class NativeEmbedding(BaseEmbedding):
@@ -27,7 +23,7 @@ class NativeEmbedding(BaseEmbedding):
         super().__init__(**kwargs)
         self.url = native_embedding_url
 
-    def _get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def _get_text_embeddings(self, texts: list[str]) -> list[list[float]]:
         """
         Call the native (bare-metal) embedding service.
         """
@@ -43,16 +39,16 @@ class NativeEmbedding(BaseEmbedding):
             print(f"Error while requesting service: {e}")
             raise e
 
-    def _get_text_embedding(self, text: str) -> List[float]:
+    def _get_text_embedding(self, text: str) -> list[float]:
         return self._get_text_embeddings([text])[0]
 
-    def _get_query_embedding(self, query: str) -> List[float]:
+    def _get_query_embedding(self, query: str) -> list[float]:
         """
         Dummy method
         """
         return self._get_text_embedding(query)
 
-    async def _aget_query_embedding(self, query: str) -> List[float]:
+    async def _aget_query_embedding(self, query: str) -> list[float]:
         """
         Dummy method
         """
@@ -334,7 +330,7 @@ class WeaviateManager:
 
         combined_filter = wq.Filter.any_of(filters) if len(filters) > 1 else filters[0]
 
-        return combined_filter
+        return cast("wq.Filter", combined_filter)
 
     def batch_wikichunk_fetch(
         self, grouped_source_chunk_id: dict[str, list[int]]
@@ -346,7 +342,7 @@ class WeaviateManager:
         combined_filter = self.wikichunk_combined_filter(grouped_source_chunk_id)
 
         response = collection.query.fetch_objects(
-            filters=combined_filter,
+            filters=cast(Any, combined_filter),
             limit=len(grouped_source_chunk_id) + 1,
             return_properties=["source_id", "source_title", "chunk_id", "chunk_text"],
         )

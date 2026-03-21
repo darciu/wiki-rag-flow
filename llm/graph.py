@@ -1,45 +1,33 @@
-from typing import TypedDict, Annotated, List
-from langgraph.graph.message import add_messages
-from langchain_core.messages import AnyMessage
 import logging
-import random
 import math
-import instructor
-from instructor.core.client import Instructor
-from instructor.exceptions import InstructorRetryException
-from pydantic import BaseModel, Field, model_validator
-from openai import OpenAI
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables.config import RunnableConfig
-from typing import TypedDict, Dict, List, Union, Annotated, Sequence
-from langgraph.graph import StateGraph, START, END
+import random
+from collections import defaultdict
+from typing import Annotated, TypedDict, cast
+
 from langchain_core.messages import (
-    HumanMessage,
     AIMessage,
-    BaseMessage,
-    ToolMessage,
+    AnyMessage,
+    HumanMessage,
     SystemMessage,
 )
+from langchain_core.runnables.config import RunnableConfig
+from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
-from collections import defaultdict
-from langchain_core.tools import tool
-from langchain_core.tools import tool
+from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
-from langchain_ollama import ChatOllama
-from langgraph.graph import StateGraph, START, END
-from langchain_core.messages import AIMessage
+
+from llm.prompts import MATH_SYSTEM_PROMPT
 from llm.routing import (
+    RouteType,
+    TaskType,
+    compare_query,
     create_plan,
     direct_query,
-    process_query,
     lookup_query,
-    summarize_query,
     precompare_query,
-    compare_query,
+    process_query,
+    summarize_query,
 )
-from llm.routing import RouteType, TaskType
-from llm.prompts import MATH_SYSTEM_PROMPT
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -47,8 +35,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class AgentState(TypedDict):
-    messages: Annotated[List[AnyMessage], add_messages]
+class AgentState(TypedDict, total=False):
+    messages: Annotated[list[AnyMessage], add_messages]
     current_query: str
     answer: str
     further_questions: str | None
@@ -273,7 +261,7 @@ math_tools = [add, subtract, multiply, divide, power, square_root, absolute_valu
 
 
 def router_node(state: AgentState, config: RunnableConfig) -> dict:
-    last_message = state["messages"][-1].content
+    last_message = cast(str, state["messages"][-1].content)
 
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
@@ -301,7 +289,7 @@ def direct_node(state: AgentState, config: RunnableConfig) -> dict:
     current_query = state["current_query"]
 
     decision = direct_query(instructor_client, current_query, model_name)
-    if decision.knows_answer == True:
+    if decision.knows_answer:
         return {"messages": [AIMessage(content=decision.answer)]}
     else:
         answers = [
@@ -376,7 +364,7 @@ def route_condition(state: AgentState) -> str:
             return "compare"
         elif task == TaskType.SUMMARIZE:
             return "summarize"
-        else:
+        elif task == TaskType.LOOKUP:
             return "lookup"
 
     elif route == RouteType.DIRECT:

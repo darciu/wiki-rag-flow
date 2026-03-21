@@ -1,8 +1,14 @@
+import logging
 from contextlib import asynccontextmanager
+from typing import Any, cast
 from uuid import uuid4
 
 import instructor
+import requests
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_ollama import ChatOllama
 from openai import OpenAI
 
 from backend.app.schemas import (
@@ -13,12 +19,8 @@ from backend.app.schemas import (
 )
 from backend.db.weaviate.connection import WeaviateManager
 from config import OllamaSettings, WeaviateSettings
-from nlp.toolkit import NLPToolkit
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage
 from llm.graph import agent
-import logging
-import requests
+from nlp.toolkit import NLPToolkit
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -204,7 +206,7 @@ def chat(
         model_name = chat_request.model_name
         response_id = uuid4()
 
-        config = {
+        config: RunnableConfig = {
             "configurable": {
                 "thread_id": session_id,
                 "model_name": model_name,
@@ -220,16 +222,14 @@ def chat(
             "current_query": chat_request.question,
         }
 
-        result_agent_state = agent.invoke(initial_state, config=config)
+        result_agent_state = agent.invoke(cast(Any, initial_state), config=config)
 
         answer = result_agent_state["messages"][-1].content
-        route_type = result_agent_state.get("route")
         suggested_questions = result_agent_state.get("further_questions", [])
 
         chat_response = ChatResponse(
             answer=answer,
             suggested_prompts=suggested_questions,
-            route=route_type,
             id=response_id,
             user_agent=request.headers.get("user-agent"),
             session_id=session_id,
@@ -239,7 +239,6 @@ def chat(
         # for feedback
         request.app.state.chat_last_session = {
             "chat_response_id": response_id,
-            "chat_route": route_type,
         }
 
         return chat_response

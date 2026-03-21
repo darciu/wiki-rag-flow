@@ -29,7 +29,6 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str = Field(..., description="Chat response")
     suggested_prompts: list[str] = Field(default_factory=list, description="Suggest")
-    route: RouteType = Field(..., description="LLMs routing")
     id: UUID = Field(default_factory=uuid4, description="Chat response ID")
     user_agent: str | None = Field(None, description="User data from browser")
     session_id: str = Field(..., description="Cookie session id")

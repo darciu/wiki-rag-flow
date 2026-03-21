@@ -1,43 +1,19 @@
-from typing import TypedDict, Annotated, List
-from langgraph.graph.message import add_messages
-from langchain_core.messages import AnyMessage
 import logging
-from enum import StrEnum
-from pydantic import BaseModel, Field, model_validator
-from instructor.core.client import Instructor
-from instructor.exceptions import InstructorRetryException
-from llm.prompts import (
-    PLANNER_SYSTEM_PROMPT,
-    DIRECT_ANSWER_SYSTEM_PROMPT,
-    PROCESS_SYSTEM_PROMPT,
-    LOOKUP_SYSTEM_PROMPT,
-    SUMMARIZE_SYSTEM_PROMPT,
-    PRECOMPARE_SYSTEM_PROMPT,
-    COMPARE_SYSTEM_PROMPT,
-)
-import instructor
+
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
 from pydantic import BaseModel, Field, model_validator
-from openai import OpenAI
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables.config import RunnableConfig
-from typing import TypedDict, Dict, List, Union, Annotated, Sequence
-from langgraph.graph import StateGraph, START, END
-from langchain_core.messages import (
-    HumanMessage,
-    AIMessage,
-    BaseMessage,
-    ToolMessage,
-    SystemMessage,
-)
-from langchain_core.tools import tool
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
-from langchain_ollama import ChatOllama
-from instructor.core.client import Instructor
-from instructor.exceptions import InstructorRetryException
+
 from backend.app.schemas import RouteType, TaskType
+from llm.prompts import (
+    COMPARE_SYSTEM_PROMPT,
+    DIRECT_ANSWER_SYSTEM_PROMPT,
+    LOOKUP_SYSTEM_PROMPT,
+    PLANNER_SYSTEM_PROMPT,
+    PRECOMPARE_SYSTEM_PROMPT,
+    PROCESS_SYSTEM_PROMPT,
+    SUMMARIZE_SYSTEM_PROMPT,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -100,14 +76,14 @@ class QueryProcessing(BaseModel):
 
 class LookupQuery(BaseModel):
     answer: str = Field(description="Answer to the question from <context>.")
-    further_questions: List[str] = Field(
+    further_questions: list[str] = Field(
         description="List of one or two questions generated from the given <context>, other than <question>."
     )
 
 
 class SummarizeQuery(BaseModel):
     summary: str = Field(description="Summary of given text.")
-    further_questions: List[str] = Field(
+    further_questions: list[str] = Field(
         description="List of one or two questions generated from the given <context>, other than <question>."
     )
 
@@ -152,7 +128,7 @@ class CompareQuery(BaseModel):
     comparison: str = Field(
         description="Compare <entities> using <context>. Focus on <aspects> if provided; otherwise, extract and compare main features."
     )
-    further_questions: List[str] = Field(
+    further_questions: list[str] = Field(
         description="List of one or two questions generated from the given <context>, other than <question>."
     )
 
@@ -175,7 +151,10 @@ def create_plan(llm_client: Instructor, question: str, model_name: str) -> Query
             ],
         )
     except InstructorRetryException as e:
-        print(f"Warning! Model could not generate reply after {e.n_attempts} retires.")
+        logger.info(
+            f"Warning! Model could not generate reply after {e.n_attempts} retires."
+        )
+        return QueryPlanner(route_type=RouteType.DIRECT)
 
 
 def direct_query(
@@ -196,7 +175,6 @@ def direct_query(
         return DirectQuestion(
             answer="Przepraszam, ale nie jestem w stanie odpowiedzieć na to pytanie.",
             knows_answer=False,
-            confidence_score=0.0,
         )
 
 
