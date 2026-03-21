@@ -6,7 +6,15 @@ from enum import StrEnum
 from pydantic import BaseModel, Field, model_validator
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
-from llm.prompts import PLANNER_SYSTEM_PROMPT, DIRECT_ANSWER_SYSTEM_PROMPT, PROCESS_SYSTEM_PROMPT, LOOKUP_SYSTEM_PROMPT, SUMMARIZE_SYSTEM_PROMPT, PRECOMPARE_SYSTEM_PROMPT, COMPARE_SYSTEM_PROMPT
+from llm.prompts import (
+    PLANNER_SYSTEM_PROMPT,
+    DIRECT_ANSWER_SYSTEM_PROMPT,
+    PROCESS_SYSTEM_PROMPT,
+    LOOKUP_SYSTEM_PROMPT,
+    SUMMARIZE_SYSTEM_PROMPT,
+    PRECOMPARE_SYSTEM_PROMPT,
+    COMPARE_SYSTEM_PROMPT,
+)
 import instructor
 from instructor.core.client import Instructor
 from instructor.exceptions import InstructorRetryException
@@ -39,31 +47,31 @@ logger = logging.getLogger(__name__)
 
 class QueryPlanner(BaseModel):
     route_type: RouteType = Field(
-        ..., description="Choice of the main route: clarify, direct, math or rag_search."
+        ...,
+        description="Choice of the main route: clarify, direct, math or rag_search.",
     )
     task_type: TaskType | None = Field(
         default=None,
-        description="Task type: lookup, compare, summarize. Only if route=rag_search."
+        description="Task type: lookup, compare, summarize. Only if route=rag_search.",
     )
     clarify_message: str | None = Field(
         default=None,
-        description="Clarification question for the user, only if route=clarify."
+        description="Clarification question for the user, only if route=clarify.",
     )
-
 
     @model_validator(mode="after")
     def validate_consistency(self):
         if self.route_type == RouteType.CLARIFY and not self.clarify_message:
             raise ValueError("clarify_message is required when route=clarify")
-        
+
         if self.route_type == RouteType.RAG_SEARCH and not self.task_type:
             raise ValueError("task should not be empty when route=rag_search")
 
         if self.route_type != RouteType.CLARIFY:
             self.clarify_message = None
 
-
         return self
+
 
 class DirectQuestion(BaseModel):
     answer: str = Field(
@@ -83,6 +91,7 @@ class DirectQuestion(BaseModel):
             )
         return self
 
+
 class QueryProcessing(BaseModel):
     queries: list[str] = Field(
         ..., description="List of 1-3 different paraphrases of the underlying query."
@@ -90,21 +99,18 @@ class QueryProcessing(BaseModel):
 
 
 class LookupQuery(BaseModel):
-    answer: str = Field(
-        description="Answer to the question from <context>."
-    )
+    answer: str = Field(description="Answer to the question from <context>.")
     further_questions: List[str] = Field(
         description="List of one or two questions generated from the given <context>, other than <question>."
     )
 
 
 class SummarizeQuery(BaseModel):
-    summary: str = Field(
-        description="Summary of given text."
-    )
+    summary: str = Field(description="Summary of given text.")
     further_questions: List[str] = Field(
         description="List of one or two questions generated from the given <context>, other than <question>."
     )
+
 
 def build_search_queries(entities, comparison_aspects):
     search_queries = []
@@ -112,24 +118,26 @@ def build_search_queries(entities, comparison_aspects):
         aspects = " ".join(comparison_aspects)
     else:
         aspects = ""
-    
+
     for entity in entities:
-        search_queries.append(entity+ " " + aspects)
+        search_queries.append(entity + " " + aspects)
     search_queries.append(", ".join(entities) + " " + aspects)
     return search_queries
 
-class PreQueryCompare(BaseModel):
 
+class PreQueryCompare(BaseModel):
     entities: list[str] = Field(
         min_length=2,
-        description="List of entities appearing in user text. Return entities in their base form."
+        description="List of entities appearing in user text. Return entities in their base form.",
     )
 
-    comparison_aspects: list[str] = Field(default_factory=list, description="A criterion for comparing entities listed by the user.")
+    comparison_aspects: list[str] = Field(
+        default_factory=list,
+        description="A criterion for comparing entities listed by the user.",
+    )
 
     search_queries: list[str] = Field(default_factory=list)
 
-    
     @model_validator(mode="after")
     def generate_search_queries(self):
         if not self.search_queries:
@@ -139,6 +147,7 @@ class PreQueryCompare(BaseModel):
             )
         return self
 
+
 class CompareQuery(BaseModel):
     comparison: str = Field(
         description="Compare <entities> using <context>. Focus on <aspects> if provided; otherwise, extract and compare main features."
@@ -146,6 +155,7 @@ class CompareQuery(BaseModel):
     further_questions: List[str] = Field(
         description="List of one or two questions generated from the given <context>, other than <question>."
     )
+
 
 def create_plan(llm_client: Instructor, question: str, model_name: str) -> QueryPlanner:
 
@@ -157,15 +167,16 @@ def create_plan(llm_client: Instructor, question: str, model_name: str) -> Query
             temperature=0,
             messages=[
                 {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
-                {"role": "system", "content": "The knowledge database contains Polish Wikipedia articles divided into chunks."},
+                {
+                    "role": "system",
+                    "content": "The knowledge database contains Polish Wikipedia articles divided into chunks.",
+                },
                 {"role": "user", "content": question},
             ],
         )
     except InstructorRetryException as e:
-        print(
-            f"Warning! Model could not generate reply after {e.n_attempts} retires."
-        )
-    
+        print(f"Warning! Model could not generate reply after {e.n_attempts} retires.")
+
 
 def direct_query(
     client: Instructor, user_query: str, model_name: str
@@ -187,7 +198,6 @@ def direct_query(
             knows_answer=False,
             confidence_score=0.0,
         )
-    
 
 
 def process_query(
@@ -211,7 +221,7 @@ def process_query(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )
         return QueryProcessing(queries=[])
-    
+
 
 def lookup_query(client: Instructor, context: str, model_name: str) -> LookupQuery:
     try:
@@ -235,11 +245,13 @@ def lookup_query(client: Instructor, context: str, model_name: str) -> LookupQue
 
         return LookupQuery(
             answer="Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.",
-            further_questions = [],
+            further_questions=[],
         )
-    
 
-def summarize_query(client: Instructor, context: str, model_name: str) -> SummarizeQuery:
+
+def summarize_query(
+    client: Instructor, context: str, model_name: str
+) -> SummarizeQuery:
     try:
         system_prompt = SUMMARIZE_SYSTEM_PROMPT
 
@@ -261,12 +273,13 @@ def summarize_query(client: Instructor, context: str, model_name: str) -> Summar
 
         return SummarizeQuery(
             summary="Nie udało mi się podsumować danej kwestii.",
-            further_questions = [],
+            further_questions=[],
         )
-    
 
 
-def precompare_query(llm_client: Instructor, question: str, model_name: str) -> PreQueryCompare:
+def precompare_query(
+    llm_client: Instructor, question: str, model_name: str
+) -> PreQueryCompare | None:
 
     try:
         return llm_client.chat.completions.create(
@@ -280,9 +293,10 @@ def precompare_query(llm_client: Instructor, question: str, model_name: str) -> 
             ],
         )
     except InstructorRetryException as e:
-        print(
+        logger.info(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )
+        return None
 
 
 def compare_query(client: Instructor, context: str, model_name: str) -> CompareQuery:
@@ -307,5 +321,5 @@ def compare_query(client: Instructor, context: str, model_name: str) -> CompareQ
 
         return CompareQuery(
             comparison="Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.",
-            further_questions = [],
+            further_questions=[],
         )

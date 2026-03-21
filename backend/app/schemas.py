@@ -5,11 +5,13 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
+
 class RouteType(StrEnum):
     RAG_SEARCH = "rag_search"
     DIRECT = "direct"
     CLARIFY = "clarify"
     MATH = "math"
+
 
 class TaskType(StrEnum):
     LOOKUP = "lookup"

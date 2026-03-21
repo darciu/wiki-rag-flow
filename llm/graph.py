@@ -20,6 +20,7 @@ from langchain_core.messages import (
     ToolMessage,
     SystemMessage,
 )
+from langgraph.checkpoint.memory import MemorySaver
 from collections import defaultdict
 from langchain_core.tools import tool
 from langchain_core.tools import tool
@@ -28,9 +29,18 @@ from langgraph.prebuilt import ToolNode
 from langchain_ollama import ChatOllama
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import AIMessage
-from llm.routing import create_plan, direct_query, process_query, lookup_query, summarize_query, precompare_query, compare_query
+from llm.routing import (
+    create_plan,
+    direct_query,
+    process_query,
+    lookup_query,
+    summarize_query,
+    precompare_query,
+    compare_query,
+)
 from llm.routing import RouteType, TaskType
 from llm.prompts import MATH_SYSTEM_PROMPT
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -46,7 +56,9 @@ class AgentState(TypedDict):
     task_type: TaskType
     clarify_message: str | None
 
+
 ### UTILS ###
+
 
 def unique_chunks(results: list[dict]) -> list[dict]:
     """Filter unique chunks of given wiki article with the highest rank_score"""
@@ -81,7 +93,10 @@ def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
 
         is_same_doc = next_chunk["source_id"] == current_block["source_id"]
         is_sequential = False
-        if next_chunk.get("chunk_id") is not None and current_block.get("last_chunk_id") is not None:
+        if (
+            next_chunk.get("chunk_id") is not None
+            and current_block.get("last_chunk_id") is not None
+        ):
             is_sequential = next_chunk["chunk_id"] == current_block["last_chunk_id"] + 1
 
         if is_same_doc and is_sequential:
@@ -111,13 +126,13 @@ def prepare_context_for_llm(sorted_chunks: list[dict], question) -> str:
 
     return xml_output
 
-def prepare_comparison_context_for_llm(
-    sorted_chunks: list[dict], 
-    question: str, 
-    entities: list[str], 
-    comparison_aspects: list[str]
-) -> str:
 
+def prepare_comparison_context_for_llm(
+    sorted_chunks: list[dict],
+    question: str,
+    entities: list[str],
+    comparison_aspects: list[str],
+) -> str:
 
     blocks = []
     current_block = {
@@ -132,7 +147,10 @@ def prepare_comparison_context_for_llm(
 
         is_same_doc = next_chunk["source_id"] == current_block["source_id"]
         is_sequential = False
-        if next_chunk.get("chunk_id") is not None and current_block.get("last_chunk_id") is not None:
+        if (
+            next_chunk.get("chunk_id") is not None
+            and current_block.get("last_chunk_id") is not None
+        ):
             is_sequential = next_chunk["chunk_id"] == current_block["last_chunk_id"] + 1
 
         if is_same_doc and is_sequential:
@@ -159,24 +177,25 @@ def prepare_comparison_context_for_llm(
     xml_output += "</context>\n\n"
 
     xml_output += "<comparison_meta>\n"
-    
+
     if entities:
         xml_output += "  <entities>\n"
         for entity in entities:
             xml_output += f"    <entity>{entity}</entity>\n"
         xml_output += "  </entities>\n"
-    
+
     if comparison_aspects:
         xml_output += "  <aspects>\n"
         for aspect in comparison_aspects:
             xml_output += f"    <aspect>{aspect}</aspect>\n"
         xml_output += "  </aspects>\n"
-        
+
     xml_output += "</comparison_meta>\n\n"
 
     xml_output += f"<question>{question}</question>"
 
     return xml_output
+
 
 def get_neighbour_context_keys(results: list[dict]) -> list[tuple[str, int]]:
     """For given list of wiki article chunks, get also N-1 and N+1 chunks that do not overlap with existing ones"""
@@ -198,22 +217,27 @@ def get_neighbour_context_keys(results: list[dict]) -> list[tuple[str, int]]:
 
     return list(missing_keys)
 
+
 ### TOOLS ###
+
 
 @tool
 def add(a: float, b: float) -> float:
     """Addition of two numbers: a + b."""
     return a + b
 
+
 @tool
 def subtract(a: float, b: float) -> float:
     """Subtraction of two numbers: a - b."""
     return a - b
 
+
 @tool
 def multiply(a: float, b: float) -> float:
     """Multiplication of two numbers: a * b."""
     return a * b
+
 
 @tool
 def divide(a: float, b: float) -> float:
@@ -222,10 +246,12 @@ def divide(a: float, b: float) -> float:
         raise ValueError("Cannot divide by zero!")
     return a / b
 
+
 @tool
 def power(base: float, exponent: float) -> float:
     """Raises the base to the power of the exponent: base ** exponent."""
     return math.pow(base, exponent)
+
 
 @tool
 def square_root(a: float) -> float:
@@ -234,14 +260,17 @@ def square_root(a: float) -> float:
         raise ValueError("Cannot calculate the square root of a negative number.")
     return math.sqrt(a)
 
+
 @tool
 def absolute_value(a: float) -> float:
     """Calculates the absolute value of a single number."""
     return abs(a)
 
+
 math_tools = [add, subtract, multiply, divide, power, square_root, absolute_value]
 
 ### NODES ###
+
 
 def router_node(state: AgentState, config: RunnableConfig) -> dict:
     last_message = state["messages"][-1].content
@@ -260,25 +289,25 @@ def router_node(state: AgentState, config: RunnableConfig) -> dict:
     }
 
 
-
 def direct_node(state: AgentState, config: RunnableConfig) -> dict:
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
         raise ValueError("Could not find instructor_client")
-    
+
     current_query = state["current_query"]
-    
+
     decision = direct_query(instructor_client, current_query, "llama3.2")
     if decision.knows_answer == True:
-
         return {"messages": [AIMessage(content=decision.answer)]}
     else:
-        answers = ["Przykro mi, lecz nie dysponuję informacjami pozwalającymi odpowiedzieć na to pytanie.",
-                   "Chciałbym pomóc, ale to zagadnienie wykracza poza zakres mojej wiedzy.",
-                   "Niestety, nie znam odpowiedzi na ten temat.",
-                   "Nie posiadam danych na ten temat, ale mogę spróbować pomóc w innej kwestii.",
-                   "Tym razem nie będę w stanie udzielić wyjaśnień.",
-                   "Niestety, nie jestem w stanie udzielić odpowiedzi na to pytanie.",]
+        answers = [
+            "Przykro mi, lecz nie dysponuję informacjami pozwalającymi odpowiedzieć na to pytanie.",
+            "Chciałbym pomóc, ale to zagadnienie wykracza poza zakres mojej wiedzy.",
+            "Niestety, nie znam odpowiedzi na ten temat.",
+            "Nie posiadam danych na ten temat, ale mogę spróbować pomóc w innej kwestii.",
+            "Tym razem nie będę w stanie udzielić wyjaśnień.",
+            "Niestety, nie jestem w stanie udzielić odpowiedzi na to pytanie.",
+        ]
 
         return {"messages": [AIMessage(content=random.choice(answers))]}
 
@@ -289,32 +318,27 @@ def clarify_node(state: AgentState) -> dict:
 
 def math_node(state: AgentState, config: RunnableConfig) -> dict:
     current_query = state["current_query"]
-    
+
     langchain_client = config.get("configurable", {}).get("langchain_client")
     if not langchain_client:
         raise ValueError("Could not find langchain client")
 
     math_langchain_client = langchain_client.bind_tools(math_tools)
 
-    system_prompt = SystemMessage(
-        content=MATH_SYSTEM_PROMPT
-    )
-    
-    response = math_langchain_client.invoke([
-        system_prompt, 
-        HumanMessage(content=current_query)
-    ])
+    system_prompt = SystemMessage(content=MATH_SYSTEM_PROMPT)
 
-    
+    response = math_langchain_client.invoke(
+        [system_prompt, HumanMessage(content=current_query)]
+    )
+
     if response.tool_calls:
         tool_call = response.tool_calls[0]
         tool_name = tool_call["name"]
         tool_args = tool_call["args"]
-        
-        
+
         tools_map = {t.name: t for t in math_tools}
         selected_tool = tools_map[tool_name]
-        
+
         answers = [
             "Wynik to: ",
             "Obliczona wartość wynosi: ",
@@ -323,7 +347,7 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
             "Końcowa wartość to: ",
             "Uzyskany rezultat wynosi: ",
             "System wygenerował wynik: ",
-            "Wynik: "
+            "Wynik: ",
         ]
 
         try:
@@ -339,7 +363,7 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
 
 def route_condition(state: AgentState) -> str:
     route = state.get("route")
-    
+
     if route == RouteType.RAG_SEARCH:
         task = state.get("task_type")
         if task == TaskType.LOOKUP:
@@ -350,14 +374,14 @@ def route_condition(state: AgentState) -> str:
             return "summarize"
         else:
             return "lookup"
-            
+
     elif route == RouteType.DIRECT:
         return "direct"
     elif route == RouteType.CLARIFY:
         return "clarify"
     elif route == RouteType.MATH:
         return "math"
-        
+
     return "direct"
 
 
@@ -365,17 +389,16 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
     weaviate_client = config.get("configurable", {}).get("weaviate_client")
     if not weaviate_client:
         raise ValueError("Could not find weaviate client")
-    
+
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
         raise ValueError("Could not find instructor_client")
-    
+
     nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
     if not nlp_toolkit:
         raise ValueError("Could not find nlp_toolkit")
-    
-    
-    current_query = state['current_query']
+
+    current_query = state["current_query"]
     decision = process_query(instructor_client, current_query, "llama3.2")
 
     all_queries = [current_query] + decision.queries
@@ -395,9 +418,7 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
 
     basic_chunks = basic_chunks[:10]
 
-    sorted_chunks = sorted(
-        basic_chunks, key=lambda x: (x["source_id"], x["chunk_id"])
-    )
+    sorted_chunks = sorted(basic_chunks, key=lambda x: (x["source_id"], x["chunk_id"]))
 
     context_for_llm = prepare_context_for_llm(sorted_chunks, current_query)
 
@@ -409,24 +430,29 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
         "further_questions": lookup_decision.further_questions,
     }
 
+
 def compare_node(state: AgentState, config: RunnableConfig) -> dict:
 
     weaviate_client = config.get("configurable", {}).get("weaviate_client")
     if not weaviate_client:
         raise ValueError("Could not find weaviate client")
-    
+
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
         raise ValueError("Could not find instructor_client")
-    
+
     nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
     if not nlp_toolkit:
         raise ValueError("Could not find nlp_toolkit")
 
-    
-    
-    current_query = state['current_query']
+    current_query = state["current_query"]
     decision = precompare_query(instructor_client, current_query, "llama3.2")
+
+    if not decision:
+        return {
+            "answer": "Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.",
+            "further_questions": [],
+        }
 
     logger.info(decision)
 
@@ -442,12 +468,12 @@ def compare_node(state: AgentState, config: RunnableConfig) -> dict:
             elem["rank_score"] = score
 
         all_chunks.extend(query_results[:3])
-    
-    sorted_chunks = sorted(
-        all_chunks, key=lambda x: (x["source_id"], x["chunk_id"])
-    )
 
-    context_for_llm = prepare_comparison_context_for_llm(sorted_chunks, current_query, decision.entities, decision.comparison_aspects)
+    sorted_chunks = sorted(all_chunks, key=lambda x: (x["source_id"], x["chunk_id"]))
+
+    context_for_llm = prepare_comparison_context_for_llm(
+        sorted_chunks, current_query, decision.entities, decision.comparison_aspects
+    )
 
     compare_decision = compare_query(instructor_client, context_for_llm, "llama3.2")
 
@@ -457,21 +483,22 @@ def compare_node(state: AgentState, config: RunnableConfig) -> dict:
         "further_questions": compare_decision.further_questions,
     }
 
+
 def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
 
     weaviate_client = config.get("configurable", {}).get("weaviate_client")
     if not weaviate_client:
         raise ValueError("Could not find weaviate client")
-    
+
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
         raise ValueError("Could not find instructor_client")
-    
+
     nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
     if not nlp_toolkit:
         raise ValueError("Could not find nlp_toolkit")
-    
-    current_query = state['current_query']
+
+    current_query = state["current_query"]
     decision = process_query(instructor_client, current_query, "llama3.2")
 
     all_queries = [current_query] + decision.queries
@@ -505,14 +532,12 @@ def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
     context_for_llm = prepare_context_for_llm(sorted_chunks, current_query)
 
     summarize_decision = summarize_query(instructor_client, context_for_llm, "llama3.2")
-    
 
     return {
         "messages": [AIMessage(content=summarize_decision.summary)],
         "answer": summarize_decision.summary,
         "further_questions": summarize_decision.further_questions,
     }
-
 
 
 # GRAPH
@@ -550,5 +575,6 @@ graph.add_edge("lookup", END)
 graph.add_edge("compare", END)
 graph.add_edge("summarize", END)
 
+memory = MemorySaver()
 
-agent = graph.compile()
+agent = graph.compile(checkpointer=memory)

@@ -18,10 +18,12 @@ from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
 from llm.graph import agent
 import logging
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 def create_instructor_client():
     ollama_settings = OllamaSettings()
@@ -40,7 +42,9 @@ def create_langchain_client():
     ollama_settings = OllamaSettings()
     ollama_base_url = ollama_settings.OLLAMA_BASE_URL
 
-    langchain_client = ChatOllama(model="llama3.2", temperature=0.0, base_url=ollama_base_url)
+    langchain_client = ChatOllama(
+        model="llama3.2", temperature=0.0, base_url=ollama_base_url
+    )
     return langchain_client
 
 
@@ -106,7 +110,8 @@ def get_instructor_client(request: Request):
         raise HTTPException(
             status_code=503, detail="Instructor client not initialized"
         ) from err
-    
+
+
 def get_langchain_client(request: Request):
     try:
         return request.app.state.langchain_client
@@ -150,11 +155,16 @@ def chat(
     nlp_toolkit=Depends(get_nlp_toolkit),  # noqa: B008
 ):
     try:
+        session_id = request.cookies.get("session_id")
+        if not session_id:
+            session_id = str(uuid4())
+            response.set_cookie(key="session_id", value=session_id, httponly=True)
         model_name = chat_request.model_name
         response_id = uuid4()
 
         config = {
             "configurable": {
+                "thread_id": session_id,
                 "instructor_client": instructor_client,
                 "weaviate_client": weaviate_client,
                 "nlp_toolkit": nlp_toolkit,
@@ -164,19 +174,14 @@ def chat(
 
         initial_state = {
             "messages": [HumanMessage(content=chat_request.question)],
-            "current_query": chat_request.question
+            "current_query": chat_request.question,
         }
 
         result_agent_state = agent.invoke(initial_state, config=config)
+
         answer = result_agent_state["messages"][-1].content
         route_type = result_agent_state.get("route")
-        suggested_questions = result_agent_state.get('further_questions',[])
-
-
-        session_id = request.cookies.get("session_id")
-        if not session_id:
-            session_id = str(uuid4())
-            response.set_cookie(key="session_id", value=session_id, httponly=True)
+        suggested_questions = result_agent_state.get("further_questions", [])
 
         chat_response = ChatResponse(
             answer=answer,
@@ -193,7 +198,6 @@ def chat(
             "chat_response_id": response_id,
             "chat_route": route_type,
         }
-
 
         return chat_response
 

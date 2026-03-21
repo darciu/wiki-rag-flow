@@ -17,10 +17,13 @@ from llama_index.vector_stores.weaviate import WeaviateVectorStore
 from llama_index.core import VectorStoreIndex
 from llama_index.core.vector_stores.types import VectorStoreQueryMode
 
+
 class NativeEmbedding(BaseEmbedding):
     url: str = "http://localhost:8008/embed"
 
-    def __init__(self, native_embedding_url: str = "http://localhost:8008/embed", **kwargs: Any) -> None:
+    def __init__(
+        self, native_embedding_url: str = "http://localhost:8008/embed", **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self.url = native_embedding_url
 
@@ -39,11 +42,10 @@ class NativeEmbedding(BaseEmbedding):
         except requests.RequestException as e:
             print(f"Error while requesting service: {e}")
             raise e
-        
 
     def _get_text_embedding(self, text: str) -> List[float]:
         return self._get_text_embeddings([text])[0]
-    
+
     def _get_query_embedding(self, query: str) -> List[float]:
         """
         Dummy method
@@ -55,6 +57,7 @@ class NativeEmbedding(BaseEmbedding):
         Dummy method
         """
         return self._get_query_embedding(query)
+
 
 class WeaviateManager:
     def __init__(
@@ -220,7 +223,6 @@ class WeaviateManager:
         collection = self.client.collections.get(collection_name)
         return collection
 
-
     def build_embedding_input_wiki_chunk(self, item: dict) -> str:
         """
         Construct the text representation to be embedded.
@@ -252,7 +254,7 @@ class WeaviateManager:
             return
 
         texts = [self.build_embedding_input_wiki_chunk(item) for item in data_items]
-        
+
         vectors = self.embedder._get_text_embeddings(texts)
 
         collection = self.create_wiki_chunk_collection()
@@ -281,26 +283,25 @@ class WeaviateManager:
         """
         self.client.collections.delete(collection_name)
 
-
     def single_wikichunk_hybrid_fetch(
         self, query_text: str, weaviate_limit: int, alpha: float
     ) -> list[dict]:
         """
         Single query hybrid search
         """
-        
+
         vector_store = WeaviateVectorStore(
-            weaviate_client=self.client, 
-            index_name="WikiChunk",
-            text_key="chunk_text" 
+            weaviate_client=self.client, index_name="WikiChunk", text_key="chunk_text"
         )
 
-        index = VectorStoreIndex.from_vector_store(vector_store, embed_model=self.embedder)
+        index = VectorStoreIndex.from_vector_store(
+            vector_store, embed_model=self.embedder
+        )
 
         retriever = index.as_retriever(
             vector_store_query_mode=VectorStoreQueryMode.HYBRID,
             similarity_top_k=weaviate_limit,
-            alpha=alpha
+            alpha=alpha,
         )
 
         nodes_with_scores = retriever.retrieve(query_text)
@@ -319,7 +320,9 @@ class WeaviateManager:
 
         return query_results
 
-    def wikichunk_combined_filter(self, grouped_source_chunk_id: dict[str, list[int]]) -> "wq.Filter":
+    def wikichunk_combined_filter(
+        self, grouped_source_chunk_id: dict[str, list[int]]
+    ) -> "wq.Filter":
         """Combine filter of source_ids and chunk_ids for optimized querying"""
 
         filters = []
@@ -333,9 +336,11 @@ class WeaviateManager:
 
         return combined_filter
 
-    def batch_wikichunk_fetch(self, grouped_source_chunk_id: dict[str, list[int]]) -> list[dict[str, Any]]:
+    def batch_wikichunk_fetch(
+        self, grouped_source_chunk_id: dict[str, list[int]]
+    ) -> list[dict[str, Any]]:
         """Fetches multiple data chunks by ID and initialize them with default ranking score"""
-        
+
         collection_name = "WikiChunk"
         collection = self.client.collections.get(collection_name)
         combined_filter = self.wikichunk_combined_filter(grouped_source_chunk_id)

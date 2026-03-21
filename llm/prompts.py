@@ -204,7 +204,6 @@ Output: {
 """
 
 
-
 LOOKUP_SYSTEM_PROMPT = """
 You are a Content Analysis Expert. Your task is to precisely answer the user's question and propose follow-up questions exploring the topic, based solely on the provided sources. You must strictly adhere to the rules below.
 
