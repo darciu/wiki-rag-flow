@@ -18,6 +18,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
 from llm.graph import agent
 import logging
+import requests
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -144,6 +145,47 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/models")
+def get_installed_models():
+    try:
+        ollama_settings = OllamaSettings()
+        ollama_base_url = ollama_settings.OLLAMA_BASE_URL
+
+        response = requests.get(f"{ollama_base_url}/api/tags", timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        # only LLMs
+        llm_models = []
+        for model in data.get("models", []):
+            name = model.get("name", "").lower()
+            details = model.get("details", {})
+
+            family = details.get("family", "").lower()
+            families = [f.lower() for f in (details.get("families") or [])]
+
+            if (
+                "bert" in family
+                or "nomic-bert" in family
+                or any("bert" in f for f in families)
+            ):
+                continue
+
+            if "embed" in name or "bge" in name or "minilm" in name:
+                continue
+
+            llm_models.append(model["name"])
+
+        if not llm_models:
+            llm_models = ["llama3.2"]
+
+        return {"models": llm_models}
+    except Exception as e:
+        logger.error(f"Failed to fetch models from Ollama: {e}")
+        return {"models": ["llama3.2"]}
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(
     chat_request: ChatRequest,
@@ -165,6 +207,7 @@ def chat(
         config = {
             "configurable": {
                 "thread_id": session_id,
+                "model_name": model_name,
                 "instructor_client": instructor_client,
                 "weaviate_client": weaviate_client,
                 "nlp_toolkit": nlp_toolkit,

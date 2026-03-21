@@ -279,7 +279,9 @@ def router_node(state: AgentState, config: RunnableConfig) -> dict:
     if not instructor_client:
         raise ValueError("Could not find instructor_client")
 
-    decision = create_plan(instructor_client, last_message, "llama3.2")
+    model_name = config.get("configurable", {}).get("model_name", "llama3.2")
+
+    decision = create_plan(instructor_client, last_message, model_name)
 
     return {
         "current_query": last_message,
@@ -294,9 +296,11 @@ def direct_node(state: AgentState, config: RunnableConfig) -> dict:
     if not instructor_client:
         raise ValueError("Could not find instructor_client")
 
+    model_name = config.get("configurable", {}).get("model_name", "llama3.2")
+
     current_query = state["current_query"]
 
-    decision = direct_query(instructor_client, current_query, "llama3.2")
+    decision = direct_query(instructor_client, current_query, model_name)
     if decision.knows_answer == True:
         return {"messages": [AIMessage(content=decision.answer)]}
     else:
@@ -398,8 +402,10 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
     if not nlp_toolkit:
         raise ValueError("Could not find nlp_toolkit")
 
+    model_name = config.get("configurable", {}).get("model_name", "llama3.2")
+
     current_query = state["current_query"]
-    decision = process_query(instructor_client, current_query, "llama3.2")
+    decision = process_query(instructor_client, current_query, model_name)
 
     all_queries = [current_query] + decision.queries
 
@@ -422,7 +428,7 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
 
     context_for_llm = prepare_context_for_llm(sorted_chunks, current_query)
 
-    lookup_decision = lookup_query(instructor_client, context_for_llm, "llama3.2")
+    lookup_decision = lookup_query(instructor_client, context_for_llm, model_name)
 
     return {
         "messages": [AIMessage(content=lookup_decision.answer)],
@@ -445,8 +451,10 @@ def compare_node(state: AgentState, config: RunnableConfig) -> dict:
     if not nlp_toolkit:
         raise ValueError("Could not find nlp_toolkit")
 
+    model_name = config.get("configurable", {}).get("model_name", "llama3.2")
+
     current_query = state["current_query"]
-    decision = precompare_query(instructor_client, current_query, "llama3.2")
+    decision = precompare_query(instructor_client, current_query, model_name)
 
     if not decision:
         return {
@@ -475,7 +483,7 @@ def compare_node(state: AgentState, config: RunnableConfig) -> dict:
         sorted_chunks, current_query, decision.entities, decision.comparison_aspects
     )
 
-    compare_decision = compare_query(instructor_client, context_for_llm, "llama3.2")
+    compare_decision = compare_query(instructor_client, context_for_llm, model_name)
 
     return {
         "messages": [AIMessage(content=compare_decision.comparison)],
@@ -498,8 +506,10 @@ def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
     if not nlp_toolkit:
         raise ValueError("Could not find nlp_toolkit")
 
+    model_name = config.get("configurable", {}).get("model_name", "llama3.2")
+
     current_query = state["current_query"]
-    decision = process_query(instructor_client, current_query, "llama3.2")
+    decision = process_query(instructor_client, current_query, model_name)
 
     all_queries = [current_query] + decision.queries
 
@@ -531,7 +541,7 @@ def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
 
     context_for_llm = prepare_context_for_llm(sorted_chunks, current_query)
 
-    summarize_decision = summarize_query(instructor_client, context_for_llm, "llama3.2")
+    summarize_decision = summarize_query(instructor_client, context_for_llm, model_name)
 
     return {
         "messages": [AIMessage(content=summarize_decision.summary)],
