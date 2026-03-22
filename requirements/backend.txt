@@ -19,3 +19,10 @@ llama-index-core==0.14.18
 llama-index-vector-stores-weaviate==1.6.0
 langchain-ollama==1.0.1
 langgraph==1.0.8
+langchain==1.2.10
+opentelemetry-exporter-otlp==1.40.0
+opentelemetry-sdk==1.40.0
+openinference-instrumentation-openai==0.1.42
+openinference-instrumentation-langchain==0.1.61
+arize-phoenix==13.15.0
+python-logging-loki==0.3.1

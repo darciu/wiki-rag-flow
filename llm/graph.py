@@ -29,9 +29,6 @@ from llm.routing import (
     summarize_query,
 )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
@@ -265,11 +262,13 @@ def router_node(state: AgentState, config: RunnableConfig) -> dict:
 
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
+        logger.error("Could not find instructor_client")
         raise ValueError("Could not find instructor_client")
 
     model_name = config.get("configurable", {}).get("model_name", "llama3.2")
 
     decision = create_plan(instructor_client, last_message, model_name)
+    logger.info(f"Route type: {decision.route_type}\nTask type: {decision.task_type}")
 
     return {
         "current_query": last_message,
@@ -282,6 +281,7 @@ def router_node(state: AgentState, config: RunnableConfig) -> dict:
 def direct_node(state: AgentState, config: RunnableConfig) -> dict:
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
+        logger.error("Could not find instructor_client")
         raise ValueError("Could not find instructor_client")
 
     model_name = config.get("configurable", {}).get("model_name", "llama3.2")
@@ -290,6 +290,7 @@ def direct_node(state: AgentState, config: RunnableConfig) -> dict:
 
     decision = direct_query(instructor_client, current_query, model_name)
     if decision.knows_answer:
+        logger.info(f"Direct answer (knows answer): {decision.answer}")
         return {"messages": [AIMessage(content=decision.answer)]}
     else:
         answers = [
@@ -300,11 +301,13 @@ def direct_node(state: AgentState, config: RunnableConfig) -> dict:
             "Tym razem nie będę w stanie udzielić wyjaśnień.",
             "Niestety, nie jestem w stanie udzielić odpowiedzi na to pytanie.",
         ]
-
-        return {"messages": [AIMessage(content=random.choice(answers))]}
+        answer = random.choice(answers)
+        logger.info(f"Direct answer (doesn't know answer): {answer}")
+        return {"messages": [AIMessage(content=answer)]}
 
 
 def clarify_node(state: AgentState) -> dict:
+    logger.info(f"Clarify answer: {state['clarify_message']}")
     return {"messages": [AIMessage(content=state["clarify_message"])]}
 
 
@@ -313,6 +316,7 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
 
     langchain_client = config.get("configurable", {}).get("langchain_client")
     if not langchain_client:
+        logger.error("Could not find langchain client")
         raise ValueError("Could not find langchain client")
 
     math_langchain_client = langchain_client.bind_tools(math_tools)
@@ -345,11 +349,13 @@ def math_node(state: AgentState, config: RunnableConfig) -> dict:
         try:
             result = selected_tool.invoke(tool_args)
             final_content = random.choice(answers) + str(result)
+
         except Exception as e:
+            logger.exception(f"Błąd podczas obliczeń matematycznych: {str(e)}")
             final_content = f"Błąd podczas obliczeń matematycznych: {str(e)}"
     else:
         final_content = "Nie udało mi się wykonać działania matematycznego."
-
+        logger.info(f"Math answer: {final_content}")
     return {"messages": [AIMessage(content=final_content)]}
 
 
@@ -380,14 +386,17 @@ def route_condition(state: AgentState) -> str:
 def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
     weaviate_client = config.get("configurable", {}).get("weaviate_client")
     if not weaviate_client:
+        logger.error("Could not find weaviate client")
         raise ValueError("Could not find weaviate client")
 
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
+        logger.error("Could not find instructor client")
         raise ValueError("Could not find instructor_client")
 
     nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
     if not nlp_toolkit:
+        logger.error("Could not find nlp toolkit")
         raise ValueError("Could not find nlp_toolkit")
 
     model_name = config.get("configurable", {}).get("model_name", "llama3.2")
@@ -399,6 +408,7 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
 
     basic_chunks = []
     for query_text in all_queries:
+        logger.info(f"Search Weaviate database for query: {query_text}")
         query_results = weaviate_client.single_wikichunk_hybrid_fetch(
             query_text, 8, 0.5
         )
@@ -408,15 +418,20 @@ def lookup_node(state: AgentState, config: RunnableConfig) -> dict:
         for score, elem in zip(scores, query_results, strict=True):
             elem["rank_score"] = score
         basic_chunks.extend(query_results)
+
     basic_chunks = unique_chunks(basic_chunks)
 
-    basic_chunks = basic_chunks[:10]
+    basic_chunks = basic_chunks[:12]
 
     sorted_chunks = sorted(basic_chunks, key=lambda x: (x["source_id"], x["chunk_id"]))
 
     context_for_llm = prepare_context_for_llm(sorted_chunks, current_query)
 
     lookup_decision = lookup_query(instructor_client, context_for_llm, model_name)
+
+    logger.info(
+        f"Answer: {lookup_decision.answer}\nfurther questions: {lookup_decision.further_questions}"
+    )
 
     return {
         "messages": [AIMessage(content=lookup_decision.answer)],
@@ -429,15 +444,18 @@ def compare_node(state: AgentState, config: RunnableConfig) -> dict:
 
     weaviate_client = config.get("configurable", {}).get("weaviate_client")
     if not weaviate_client:
+        logger.error("Could not find weaviate client")
         raise ValueError("Could not find weaviate client")
 
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
-        raise ValueError("Could not find instructor_client")
+        logger.error("Could not find instructor client")
+        raise ValueError("Could not find instructor client")
 
     nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
     if not nlp_toolkit:
-        raise ValueError("Could not find nlp_toolkit")
+        logger.error("Could not find nlp toolkit")
+        raise ValueError("Could not find nlp toolkit")
 
     model_name = config.get("configurable", {}).get("model_name", "llama3.2")
 
@@ -445,15 +463,20 @@ def compare_node(state: AgentState, config: RunnableConfig) -> dict:
     decision = precompare_query(instructor_client, current_query, model_name)
 
     if not decision:
+        logger.info(
+            "Answer: Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.\nFurther questions: None"
+        )
         return {
             "answer": "Nie udało mi się znaleźć odpowiedzi na zadaną kwestię.",
             "further_questions": [],
         }
-
-    logger.info(decision)
+    logger.info(
+        f"Entities: {decision.entities}\nComparison aspects: {decision.comparison_aspects}"
+    )
 
     all_chunks = []
     for query_text in decision.search_queries:
+        logger.info(f"Search Weaviate database for query: {query_text}")
         query_results = weaviate_client.single_wikichunk_hybrid_fetch(
             query_text, 8, 0.5
         )
@@ -473,6 +496,9 @@ def compare_node(state: AgentState, config: RunnableConfig) -> dict:
 
     compare_decision = compare_query(instructor_client, context_for_llm, model_name)
 
+    logger.info(
+        f"Answer: {compare_decision.comparison}\nFurther questions: {compare_decision.further_questions}"
+    )
     return {
         "messages": [AIMessage(content=compare_decision.comparison)],
         "answer": compare_decision.comparison,
@@ -484,25 +510,30 @@ def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
 
     weaviate_client = config.get("configurable", {}).get("weaviate_client")
     if not weaviate_client:
+        logger.error("Could not find weaviate client")
         raise ValueError("Could not find weaviate client")
 
     instructor_client = config.get("configurable", {}).get("instructor_client")
     if not instructor_client:
-        raise ValueError("Could not find instructor_client")
+        logger.error("Could not find instructor client")
+        raise ValueError("Could not find instructor client")
 
     nlp_toolkit = config.get("configurable", {}).get("nlp_toolkit")
     if not nlp_toolkit:
-        raise ValueError("Could not find nlp_toolkit")
+        logger.error("Could not find nlp toolkit")
+        raise ValueError("Could not find nlp toolkit")
 
     model_name = config.get("configurable", {}).get("model_name", "llama3.2")
 
     current_query = state["current_query"]
     decision = process_query(instructor_client, current_query, model_name)
+    logger.info(f"Paraphrase queries: {decision.queries}")
 
     all_queries = [current_query] + decision.queries
 
     basic_chunks = []
     for query_text in all_queries:
+        logger.info(f"Search Weaviate database for query: {query_text}")
         query_results = weaviate_client.single_wikichunk_hybrid_fetch(
             query_text, 8, 0.5
         )
@@ -531,6 +562,9 @@ def summarize_node(state: AgentState, config: RunnableConfig) -> dict:
 
     summarize_decision = summarize_query(instructor_client, context_for_llm, model_name)
 
+    logger.info(
+        f"Answer: {summarize_decision.summary}\nFurther questions: {summarize_decision.further_questions}"
+    )
     return {
         "messages": [AIMessage(content=summarize_decision.summary)],
         "answer": summarize_decision.summary,

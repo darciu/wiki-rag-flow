@@ -1,7 +1,10 @@
+import logging
+
 import requests
 import streamlit as st
 
 from config import FrontendSettings
+from logger_config import setup_logging
 
 frontend_settings = FrontendSettings()
 FASTAPI_BACKEND_URL = frontend_settings.FASTAPI_BACKEND_URL
@@ -11,6 +14,9 @@ API_FEEDBACK_URL = f"{FASTAPI_BACKEND_URL}/feedback"
 API_MODELS_URL = f"{FASTAPI_BACKEND_URL}/models"
 
 st.set_page_config(page_title="WIKI RAG - Chat", layout="wide")
+
+setup_logging("frontend")
+logger = logging.getLogger(__name__)
 
 # CSS
 st.markdown(
@@ -70,14 +76,17 @@ if "http" not in st.session_state:
     st.session_state.http = requests.Session()
 
 
-@st.cache_data(ttl=60)  # Odświeżaj listę co 60 sekund
+@st.cache_data(ttl=20)
 def fetch_available_models():
     try:
         r = requests.get(API_MODELS_URL, timeout=5)
         r.raise_for_status()
-        return r.json().get("models", ["llama3.2"])
+        models = r.json().get("models", ["llama3.2"])
+        logger.info(f"Avaialbe ollama models: {models}")
+        return models
     except Exception as e:
-        st.sidebar.error(f"Błąd pobierania modeli: {e}")
+        logger.exception(f"Error while downloading models: {e}")
+        st.sidebar.error(f"Error while downloading models: {e}")
         return ["llama3.2"]
 
 
@@ -203,7 +212,7 @@ with right:
 st.text_area(
     "Historia czatu",
     value=render_history_text(st.session_state.history),
-    height=520,
+    height=370,
     disabled=True,
 )
 

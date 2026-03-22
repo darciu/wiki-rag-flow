@@ -4,6 +4,7 @@ from pathlib import Path
 
 from backend.db.mongodb.connection import MongoManager
 from config import MongoDBSettings, ScraperSettings
+from logger_config import setup_logging
 from scrapers.wiki.async_func import run_scraper
 from scrapers.wiki.utils import (
     fetch_dumpstatus,
@@ -15,9 +16,9 @@ from scrapers.wiki.utils import (
     pair_wiki_files,
 )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.raiseExceptions = False
+
+setup_logging("scraper")
 logger = logging.getLogger(__name__)
 
 mongodb_settings = MongoDBSettings()

@@ -6,9 +6,6 @@ from keybert import KeyBERT
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 

@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, cast
 from uuid import uuid4
@@ -10,6 +11,12 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_ollama import ChatOllama
 from openai import OpenAI
+from openinference.instrumentation.langchain import LangChainInstrumentor
+from openinference.instrumentation.openai import OpenAIInstrumentor
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from backend.app.schemas import (
     ChatRequest,
@@ -20,12 +27,12 @@ from backend.app.schemas import (
 from backend.db.weaviate.connection import WeaviateManager
 from config import OllamaSettings, WeaviateSettings
 from llm.graph import agent
+from logger_config import setup_logging
 from nlp.toolkit import NLPToolkit
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+setup_logging("backend")
 logger = logging.getLogger(__name__)
+logging.raiseExceptions = False
 
 
 def create_instructor_client():
@@ -35,7 +42,7 @@ def create_instructor_client():
     raw = OpenAI(
         base_url=ollama_base_url,
         api_key="ollama",
-        timeout=120.0,
+        timeout=30.0,
     )
     instructor_client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
     return raw, instructor_client
@@ -71,23 +78,53 @@ def verify_clients(raw_openai_client, weaviate_client, nlp_toolkit) -> None:
     try:
         raw_openai_client.models.list()
     except Exception as e:
+        logger.exception(f"LLM healthcheck failed: {e}")
         raise RuntimeError(f"LLM healthcheck failed: {e}") from e
 
     if not weaviate_client.is_healthy():
+        logger.error("Weaviate healthcheck failed (is_healthy() is False)")
         raise RuntimeError("Weaviate healthcheck failed (is_healthy() is False)")
 
     if nlp_toolkit is None:
+        logger.error("NLPToolkit is not initialized")
         raise RuntimeError("NLPToolkit is not initialized")
+
+
+def setup_phoenix_tracing():
+    endpoint = os.getenv(
+        "PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces"
+    )
+
+    tracer_provider = TracerProvider()
+    tracer_provider.add_span_processor(
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint))
+    )
+    trace.set_tracer_provider(tracer_provider)
+
+    LangChainInstrumentor().instrument()
+    OpenAIInstrumentor().instrument()
+
+    logger.info(f"Phoenix tracing initialized. Sending traces to: {endpoint}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # STARTUP
 
+    setup_phoenix_tracing()
+
     raw_instructor, instructor_client = create_instructor_client()
     langchain_client = create_langchain_client()
     weaviate_client = create_weaviate_client()
     nlp_toolkit = NLPToolkit()
+
+    logger.info("Warming up CrossEncoder.")
+    try:
+        nlp_toolkit.rank("test query", ["test context chunk"])
+        logger.info("CrossEncoder has been successfully loaded")
+    except Exception as e:
+        logger.exception(f"Could not load CrossEncoder due to error: {e}")
+        raise RuntimeError(f"Could not load CrossEncoder due to error: {e}") from e
 
     verify_clients(raw_instructor, weaviate_client, nlp_toolkit)
 
@@ -99,7 +136,7 @@ async def lifespan(app: FastAPI):
     app.state.app_run_id = uuid4()
 
     yield
-
+    logger.info("Shutting down connection to Weaviate.")
     weaviate_client.close()
 
 
@@ -119,6 +156,9 @@ def get_langchain_client(request: Request):
     try:
         return request.app.state.langchain_client
     except AttributeError as err:
+        logger.exception(
+            "Failed to retrieve Langchain client: it is not initialized in the app state."
+        )
         raise HTTPException(
             status_code=503, detail="Langchain client not initialized"
         ) from err
@@ -128,6 +168,9 @@ def get_weaviate_client(request: Request):
     try:
         return request.app.state.weaviate_client
     except AttributeError as err:
+        logger.exception(
+            "Failed to retrieve Weaviate client: it is not initialized in the app state."
+        )
         raise HTTPException(
             status_code=503, detail="Weaviate client not initialized"
         ) from err
@@ -137,6 +180,9 @@ def get_nlp_toolkit(request: Request):
     try:
         return request.app.state.nlp_toolkit
     except AttributeError as err:
+        logger.exception(
+            "Failed to retrieve NLP Toolkit: it is not initialized in the app state."
+        )
         raise HTTPException(
             status_code=503, detail="NLP toolkit not initialized"
         ) from err
@@ -189,7 +235,7 @@ def get_installed_models():
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(
+async def chat(
     chat_request: ChatRequest,
     request: Request,
     response: Response,
@@ -222,6 +268,9 @@ def chat(
             "current_query": chat_request.question,
         }
 
+        logger.info(
+            f"Agent invoke with qustion: {chat_request.question}\nModel name: {model_name}"
+        )
         result_agent_state = agent.invoke(cast(Any, initial_state), config=config)
 
         answer = result_agent_state["messages"][-1].content
@@ -244,6 +293,7 @@ def chat(
         return chat_response
 
     except Exception as err:
+        logger.exception(f"Endpoint: /chat. Error has occured: {err}")
         raise HTTPException(status_code=500, detail=str(err)) from err
 
 
@@ -252,6 +302,9 @@ def post_feedback(feedback_request: FeedbackRequest, request: Request):
 
     chat_last_session = request.app.state.chat_last_session
     if not chat_last_session:
+        logger.error(
+            "Feedback cannot be submitted. No active chat response found or feedback already sent."
+        )
         raise HTTPException(
             status_code=400,
             detail="Feedback cannot be submitted. No active chat response found or feedback already sent.",
@@ -271,6 +324,7 @@ def post_feedback(feedback_request: FeedbackRequest, request: Request):
         pass
     # save data to DB
     except Exception as err:
+        logger.exception(f"Endpoint: /feedback. Error has occured: {err}")
         raise HTTPException(
             status_code=500, detail="Failed to save feedback to database."
         ) from err

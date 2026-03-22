@@ -15,8 +15,32 @@ HOST ?= 0.0.0.0
 EMB_PORT ?= 8008
 EMB_BASE := http://$(HOST):$(EMB_PORT)
 
+ifeq ($(OS),Windows_NT)
+    OPEN := start
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        OPEN := xdg-open
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        OPEN := open
+    endif
+endif
 
-.PHONY: emb-venv emb-run-bg emb-stop emb-health ollama-up ollama-stop ollama-pull-llama ollama-pull-qwen project-up project-down
+FRONTEND_URL := http://localhost:8501
+BACKEND_URL := http://localhost:8000
+PHOENIX_URL := http://localhost:6006/projects
+GRAFANA_URL := http://localhost:3001
+
+
+.PHONY: emb-venv emb-run-bg emb-stop emb-health ollama-up ollama-stop ollama-pull-llama ollama-pull-qwen project-up project-down open-hosts
+
+open-hosts:
+	@echo "Opening hosts in your browser..."
+	@$(OPEN) $(FRONTEND_URL)
+	@$(OPEN) $(BACKEND_URL)
+	@$(OPEN) $(PHOENIX_URL)
+	@$(OPEN) $(GRAFANA_URL)
 
 build-scraper:
 	docker-compose build scraper
@@ -34,7 +58,7 @@ run-weaviate:
 emb-venv:
 	python3 -m venv $(EMB_VENV)
 	$(EMB_PY) -m pip install -U pip
-	$(EMB_PY) -m pip install fastapi "uvicorn[standard]" sentence-transformers torch
+	$(EMB_PY) -m pip install fastapi "uvicorn[standard]" sentence-transformers torch python-logging-loki==0.3.1
 
 emb-clean-port:
 	@echo "Cleaning port $(EMB_PORT)..."
@@ -42,7 +66,8 @@ emb-clean-port:
 
 emb-run-bg: emb-clean-port emb-venv
 	@mkdir -p $(EMB_DIR)
-	@nohup $(EMB_UVICORN) embedding_server:app --app-dir $(EMB_DIR) --host $(HOST) --port $(EMB_PORT) \
+	# DODANO: PYTHONPATH=. przed komendą nohup
+	@PYTHONPATH=. nohup $(EMB_UVICORN) embedding_server:app --app-dir $(EMB_DIR) --host $(HOST) --port $(EMB_PORT) \
 		> $(EMB_LOG) 2>&1 & echo $$! > $(EMB_PID)
 	@echo "Started on $(EMB_BASE) (pid: `cat $(EMB_PID)`)"
 
@@ -54,6 +79,9 @@ emb-health:
 
 project-up: emb-run-bg ollama-up
 	docker-compose up --build -d
+	sleep 5
+	$(MAKE) emb-health
+	$(MAKE) ollama-health
 
 project-down: emb-stop ollama-stop
 	docker-compose down
@@ -79,8 +107,16 @@ ollama-stop:
 ollama-pull-llama: ollama-up
 	ollama pull llama3.2
 
+ollama-pull-gemma: ollama-up
+	ollama pull gemma3:4b
+
 ollama-pull-qwen: ollama-up
-	ollama pull qwen:4b
+	ollama pull qwen2.5:7b-instruct
 
 ollama-health:
 	@curl -fsS "http://localhost:11434/api/tags" > /dev/null && echo "Ollama is Healthy" || (echo "Ollama is NOT running"; exit 1)
+
+
+
+
+
