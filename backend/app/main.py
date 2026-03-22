@@ -5,6 +5,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 import instructor
+import logging_loki
 import requests
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from langchain_core.messages import HumanMessage
@@ -29,10 +30,31 @@ from config import OllamaSettings, WeaviateSettings
 from llm.graph import agent
 from nlp.toolkit import NLPToolkit
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+
+def setup_logging():
+    loki_url = os.getenv("LOKI_ENDPOINT", "http://localhost:3100/loki/api/v1/push")
+
+    loki_handler = logging_loki.LokiHandler(
+        url=loki_url,
+        tags={"app": "wiki_rag_flow", "env": "development"},
+        version="1",
+    )
+    console_handler = logging.StreamHandler()
+    console_formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - [%(pathname)s:%(lineno)d] - %(funcName)s() - %(message)s"
+    )
+    console_handler.setFormatter(console_formatter)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    root_logger.handlers.clear()
+    root_logger.addHandler(loki_handler)
+    root_logger.addHandler(console_handler)
+
+
+setup_logging()
 logger = logging.getLogger(__name__)
+logging.raiseExceptions = False
 
 
 def create_instructor_client():
@@ -78,18 +100,19 @@ def verify_clients(raw_openai_client, weaviate_client, nlp_toolkit) -> None:
     try:
         raw_openai_client.models.list()
     except Exception as e:
+        logger.exception(f"LLM healthcheck failed: {e}")
         raise RuntimeError(f"LLM healthcheck failed: {e}") from e
 
     if not weaviate_client.is_healthy():
+        logger.error("Weaviate healthcheck failed (is_healthy() is False)")
         raise RuntimeError("Weaviate healthcheck failed (is_healthy() is False)")
 
     if nlp_toolkit is None:
+        logger.error("NLPToolkit is not initialized")
         raise RuntimeError("NLPToolkit is not initialized")
 
 
 def setup_phoenix_tracing():
-    # Pobieramy endpoint z env (skonfigurowany w docker-compose)
-    # Zapasowo kierujemy na localhost dla uruchomień lokalnych bez dockera
     endpoint = os.getenv(
         "PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces"
     )
@@ -100,7 +123,6 @@ def setup_phoenix_tracing():
     )
     trace.set_tracer_provider(tracer_provider)
 
-    # Automatyczna instrumentacja bibliotek, których używasz
     LangChainInstrumentor().instrument()
     OpenAIInstrumentor().instrument()
 
@@ -118,6 +140,14 @@ async def lifespan(app: FastAPI):
     weaviate_client = create_weaviate_client()
     nlp_toolkit = NLPToolkit()
 
+    logger.info("Warming up CrossEncoder.")
+    try:
+        nlp_toolkit.rank("test query", ["test context chunk"])
+        logger.info("CrossEncoder has been successfully loaded")
+    except Exception as e:
+        logger.exception(f"Could not load CrossEncoder due to error: {e}")
+        raise RuntimeError(f"Could not load CrossEncoder due to error: {e}") from e
+
     verify_clients(raw_instructor, weaviate_client, nlp_toolkit)
 
     app.state.instructor_client = instructor_client
@@ -128,7 +158,7 @@ async def lifespan(app: FastAPI):
     app.state.app_run_id = uuid4()
 
     yield
-
+    logger.info("Shutting down connection to Weaviate.")
     weaviate_client.close()
 
 
@@ -148,6 +178,9 @@ def get_langchain_client(request: Request):
     try:
         return request.app.state.langchain_client
     except AttributeError as err:
+        logger.exception(
+            "Failed to retrieve Langchain client: it is not initialized in the app state."
+        )
         raise HTTPException(
             status_code=503, detail="Langchain client not initialized"
         ) from err
@@ -157,6 +190,9 @@ def get_weaviate_client(request: Request):
     try:
         return request.app.state.weaviate_client
     except AttributeError as err:
+        logger.exception(
+            "Failed to retrieve Weaviate client: it is not initialized in the app state."
+        )
         raise HTTPException(
             status_code=503, detail="Weaviate client not initialized"
         ) from err
@@ -166,6 +202,9 @@ def get_nlp_toolkit(request: Request):
     try:
         return request.app.state.nlp_toolkit
     except AttributeError as err:
+        logger.exception(
+            "Failed to retrieve NLP Toolkit: it is not initialized in the app state."
+        )
         raise HTTPException(
             status_code=503, detail="NLP toolkit not initialized"
         ) from err
@@ -251,6 +290,7 @@ async def chat(
             "current_query": chat_request.question,
         }
 
+        logger.info(f"Agent invoke with qustion: {chat_request.question}")
         result_agent_state = agent.invoke(cast(Any, initial_state), config=config)
 
         answer = result_agent_state["messages"][-1].content
@@ -273,6 +313,7 @@ async def chat(
         return chat_response
 
     except Exception as err:
+        logger.exception(f"Endpoint: /chat. Error has occured: {err}")
         raise HTTPException(status_code=500, detail=str(err)) from err
 
 
@@ -281,6 +322,9 @@ def post_feedback(feedback_request: FeedbackRequest, request: Request):
 
     chat_last_session = request.app.state.chat_last_session
     if not chat_last_session:
+        logger.error(
+            "Feedback cannot be submitted. No active chat response found or feedback already sent."
+        )
         raise HTTPException(
             status_code=400,
             detail="Feedback cannot be submitted. No active chat response found or feedback already sent.",
@@ -300,6 +344,7 @@ def post_feedback(feedback_request: FeedbackRequest, request: Request):
         pass
     # save data to DB
     except Exception as err:
+        logger.exception(f"Endpoint: /feedback. Error has occured: {err}")
         raise HTTPException(
             status_code=500, detail="Failed to save feedback to database."
         ) from err

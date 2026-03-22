@@ -15,8 +15,30 @@ HOST ?= 0.0.0.0
 EMB_PORT ?= 8008
 EMB_BASE := http://$(HOST):$(EMB_PORT)
 
+ifeq ($(OS),Windows_NT)
+    OPEN := start
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        OPEN := xdg-open
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        OPEN := open
+    endif
+endif
 
-.PHONY: emb-venv emb-run-bg emb-stop emb-health ollama-up ollama-stop ollama-pull-llama ollama-pull-qwen project-up project-down
+FRONTEND_URL := http://localhost:8501
+BACKEND_URL := http://localhost:8000
+PHOENIX_URL := http://localhost:6006/projects
+
+
+.PHONY: emb-venv emb-run-bg emb-stop emb-health ollama-up ollama-stop ollama-pull-llama ollama-pull-qwen project-up project-down open-hosts
+
+open-hosts:
+	@echo "Otwieram hosty w przeglądarce..."
+	@$(OPEN) $(FRONTEND_URL)
+	@$(OPEN) $(BACKEND_URL)
+	@$(OPEN) $(PHOENIX_URL)
 
 build-scraper:
 	docker-compose build scraper
@@ -87,3 +109,8 @@ ollama-pull-qwen: ollama-up
 
 ollama-health:
 	@curl -fsS "http://localhost:11434/api/tags" > /dev/null && echo "Ollama is Healthy" || (echo "Ollama is NOT running"; exit 1)
+
+
+
+
+

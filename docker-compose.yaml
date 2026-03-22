@@ -54,7 +54,7 @@ services:
 
   weaviate-console:
     image: semitechnologies/weaviate-console:latest
-    container_name: local_weaviate_console
+    container_name: weaviate_console
     ports:
       - "3000:80"
     environment:
@@ -65,10 +65,10 @@ services:
 
 
   fastapi-backend:
+    container_name: fastapi-backend
     build:
       context: .
       dockerfile: dockerfiles/Dockerfile_fastapi
-    container_name: fastapi-backend
     restart: always
     env_file:
       - .env
@@ -80,6 +80,7 @@ services:
       - WEAVIATE_HOST=weaviate
       - EMBEDDING_SERVER_URL=http://host.docker.internal:8008/embed
       - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
+      - LOKI_ENDPOINT=http://loki:3100/loki/api/v1/push
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -89,6 +90,7 @@ services:
         condition: service_healthy
 
   frontend:
+    container_name: frontend
     build: 
       context: .
       dockerfile: dockerfiles/Dockerfile_frontend
@@ -101,7 +103,7 @@ services:
 
   phoenix:
     image: arizephoenix/phoenix:latest
-    container_name: local_phoenix
+    container_name: phoenix
     ports:
       - "6006:6006"
       - "4317:4317"
@@ -113,15 +115,52 @@ services:
       retries: 5
       start_period: 15s
 
+  loki:
+    container_name: loki
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      # Wskazujemy Grafanie nowy katalog na provisioning
+      - GF_PATHS_PROVISIONING=/tmp/provisioning
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /tmp/provisioning/datasources
+        cat <<EOF > /tmp/provisioning/datasources/loki.yaml
+        apiVersion: 1
+        datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://loki:3100
+          isDefault: true
+        EOF
+        exec /run.sh
+    depends_on:
+      - loki
+    restart: unless-stopped
 
   scraper:
+    container_name: wikipedia_scraper
     build:
       context: .
       dockerfile: dockerfiles/Dockerfile_scraper
     depends_on:
       mongodb:
         condition: service_healthy
-    container_name: wikipedia_scraper
     volumes:
       - ./data/wiki_dumps:/app/data/wiki_dumps
     env_file:

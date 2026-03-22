@@ -15,9 +15,6 @@ from llm.prompts import (
     SUMMARIZE_SYSTEM_PROMPT,
 )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
@@ -38,9 +35,11 @@ class QueryPlanner(BaseModel):
     @model_validator(mode="after")
     def validate_consistency(self):
         if self.route_type == RouteType.CLARIFY and not self.clarify_message:
+            logger.error("clarify_message is required when route=clarify")
             raise ValueError("clarify_message is required when route=clarify")
 
         if self.route_type == RouteType.RAG_SEARCH and not self.task_type:
+            logger.error("task should not be empty when route=rag_search")
             raise ValueError("task should not be empty when route=rag_search")
 
         if self.route_type != RouteType.CLARIFY:
@@ -62,6 +61,9 @@ class DirectQuestion(BaseModel):
     @model_validator(mode="after")
     def validate_content(self) -> "DirectQuestion":
         if not self.answer or len(self.answer.strip()) < 5:
+            logger.error(
+                "The answer field must contain meaningful content, even if you admit you cannot provide the answer."
+            )
             raise ValueError(
                 "The answer field must contain meaningful content, even if you admit you cannot provide the answer."
             )
@@ -151,7 +153,7 @@ def create_plan(llm_client: Instructor, question: str, model_name: str) -> Query
             ],
         )
     except InstructorRetryException as e:
-        logger.info(
+        logger.exception(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )
         return QueryPlanner(route_type=RouteType.DIRECT)
@@ -171,7 +173,10 @@ def direct_query(
                 {"role": "user", "content": user_query},
             ],
         )
-    except InstructorRetryException:
+    except InstructorRetryException as e:
+        logger.exception(
+            f"Warning! Model could not generate reply after {e.n_attempts} retires."
+        )
         return DirectQuestion(
             answer="Przepraszam, ale nie jestem w stanie odpowiedzieć na to pytanie.",
             knows_answer=False,
@@ -195,7 +200,7 @@ def process_query(
         )
 
     except InstructorRetryException as e:
-        logger.info(
+        logger.exception(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )
         return QueryProcessing(queries=[])
@@ -217,7 +222,7 @@ def lookup_query(client: Instructor, context: str, model_name: str) -> LookupQue
         )
         return decision
     except InstructorRetryException as e:
-        logger.info(
+        logger.exception(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )
 
@@ -245,7 +250,7 @@ def summarize_query(
         )
         return decision
     except InstructorRetryException as e:
-        logger.info(
+        logger.exception(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )
 
@@ -271,7 +276,7 @@ def precompare_query(
             ],
         )
     except InstructorRetryException as e:
-        logger.info(
+        logger.exception(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )
         return None
@@ -293,7 +298,7 @@ def compare_query(client: Instructor, context: str, model_name: str) -> CompareQ
         )
         return decision
     except InstructorRetryException as e:
-        logger.info(
+        logger.exception(
             f"Warning! Model could not generate reply after {e.n_attempts} retires."
         )
 
