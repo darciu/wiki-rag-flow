@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY frontend/ /app/frontend/
 COPY config.py /app/config.py
+COPY logger_config.py /app/logger_config.py
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1

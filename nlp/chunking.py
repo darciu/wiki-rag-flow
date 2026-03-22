@@ -7,9 +7,6 @@ from semantic_chunkers import StatisticalChunker
 from semantic_router.encoders import HuggingFaceEncoder
 from transformers import AutoTokenizer
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 

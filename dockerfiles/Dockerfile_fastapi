@@ -10,6 +10,7 @@ COPY backend/db/weaviate/ /app/backend/db/weaviate/
 COPY backend/app/ /app/backend/app/
 COPY nlp/ /app/nlp/
 COPY config.py /app/config.py
+COPY logger_config.py /app/logger_config.py
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1

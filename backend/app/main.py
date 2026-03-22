@@ -268,7 +268,9 @@ async def chat(
             "current_query": chat_request.question,
         }
 
-        logger.info(f"Agent invoke with qustion: {chat_request.question}")
+        logger.info(
+            f"Agent invoke with qustion: {chat_request.question}\nModel name: {model_name}"
+        )
         result_agent_state = agent.invoke(cast(Any, initial_state), config=config)
 
         answer = result_agent_state["messages"][-1].content

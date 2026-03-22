@@ -8,9 +8,6 @@ from transformers import AutoModelForTokenClassification, AutoTokenizer, pipelin
 
 from nlp.entities import NEREntities
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 

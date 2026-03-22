@@ -3,9 +3,6 @@ from pathlib import Path
 
 from sentence_transformers import CrossEncoder
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 

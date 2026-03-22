@@ -7,9 +7,11 @@ import time
 from backend.db.mongodb.connection import MongoManager
 from backend.db.weaviate.connection import WeaviateManager
 from config import MongoDBSettings, WeaviateSettings
+from logger_config import setup_logging
 from nlp.toolkit import NLPToolkit
 from nlp.utils import process_batch
 
+setup_logging("parser")
 logger = logging.getLogger(__name__)
 
 
@@ -64,5 +66,4 @@ def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     main()

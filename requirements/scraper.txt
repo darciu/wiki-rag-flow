@@ -5,3 +5,4 @@ tqdm==4.67.1
 pydantic-settings==2.12.0
 types-requests==2.32.4.20260107
 anyio==4.12.1
+python-logging-loki==0.3.1
