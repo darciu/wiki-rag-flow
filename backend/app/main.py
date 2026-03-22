@@ -5,7 +5,6 @@ from typing import Any, cast
 from uuid import uuid4
 
 import instructor
-import logging_loki
 import requests
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from langchain_core.messages import HumanMessage
@@ -28,31 +27,10 @@ from backend.app.schemas import (
 from backend.db.weaviate.connection import WeaviateManager
 from config import OllamaSettings, WeaviateSettings
 from llm.graph import agent
+from logger_config import setup_logging
 from nlp.toolkit import NLPToolkit
 
-
-def setup_logging():
-    loki_url = os.getenv("LOKI_ENDPOINT", "http://localhost:3100/loki/api/v1/push")
-
-    loki_handler = logging_loki.LokiHandler(
-        url=loki_url,
-        tags={"app": "wiki_rag_flow", "env": "development"},
-        version="1",
-    )
-    console_handler = logging.StreamHandler()
-    console_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - [%(pathname)s:%(lineno)d] - %(funcName)s() - %(message)s"
-    )
-    console_handler.setFormatter(console_formatter)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-
-    root_logger.handlers.clear()
-    root_logger.addHandler(loki_handler)
-    root_logger.addHandler(console_handler)
-
-
-setup_logging()
+setup_logging("backend")
 logger = logging.getLogger(__name__)
 logging.raiseExceptions = False
 

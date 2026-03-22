@@ -1,11 +1,18 @@
 import asyncio
 import gc
+import logging
 
 import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from starlette.concurrency import run_in_threadpool
+
+from logger_config import setup_logging
+
+setup_logging("backend")
+logger = logging.getLogger(__name__)
+logging.raiseExceptions = False
 
 MODEL_NAME = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1"
 
@@ -27,6 +34,9 @@ class EmbedRequest(BaseModel):
 
 @app.get("/health")
 def health():
+    logger.info(
+        f"Embedding server heathcheck is ok! Device: {device} model name: {MODEL_NAME}"
+    )
     return {"status": "ok", "device": device, "model": MODEL_NAME}
 
 
@@ -59,7 +69,7 @@ async def embed(req: EmbedRequest):
 
     if len(req.texts) > 10000:
         raise HTTPException(413, "Too many texts in one request")
-
+    logger.info(f"Number of texts to embed: {len(req.texts)}")
     async with sem:
         emb = await run_in_threadpool(_encode_sync, req.texts, req.normalize)
         _maybe_clean()
