@@ -16,7 +16,12 @@ logging.raiseExceptions = False
 
 MODEL_NAME = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1"
 
-device = "mps" if torch.backends.mps.is_available() else "cpu"
+if torch.cuda.is_available():
+    device = "cuda"
+elif torch.backends.mps.is_available():
+    device = "mps"
+else:
+    device = "cpu"
 
 app = FastAPI()
 model = SentenceTransformer(MODEL_NAME, device=device)
