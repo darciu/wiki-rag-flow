@@ -9,7 +9,7 @@ description = "Scrape wiki articles and build a RAG based on this data with Fast
 authors = [
     {name = "Dariusz Giemza", email = "giemzadariusz@gmail.com"}
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 
 
 [tool.ruff]
@@ -34,11 +34,13 @@ ignore = ["E501"]
 
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 strict = false # strict typing check
 warn_return_any = false # warns if function returns any type if its not correct with typing
 ignore_missing_imports = true # if function does not have typing output, then ignore
-
+exclude = [
+    '^backend/db/.*'
+]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

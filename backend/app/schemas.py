@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from enum import StrEnum
 from typing import Literal
 from uuid import UUID, uuid4
@@ -23,7 +23,7 @@ class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1)
     model_name: str = "llama3.2"
     id: UUID = Field(default_factory=uuid4, description="Chat request ID")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ChatResponse(BaseModel):
@@ -33,7 +33,7 @@ class ChatResponse(BaseModel):
     user_agent: str | None = Field(None, description="User data from browser")
     session_id: str = Field(..., description="Cookie session id")
     app_run_id: UUID = Field(..., description="FastAPI run ID")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class FeedbackRequest(BaseModel):
@@ -47,4 +47,4 @@ class FeedbackResponse(BaseModel):
     user_agent: str | None = Field(None, description="User data from browser")
     session_id: str | None = Field(..., description="Cookie session id")
     app_run_id: UUID = Field(..., description="FastAPI run ID")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

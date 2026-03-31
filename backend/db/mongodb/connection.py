@@ -71,7 +71,7 @@ class MongoManager:
         filter_query: dict[str, Any] | None = None,
         projection: dict[str, Any] | None = None,
         batch_size: int = 1000,
-    ) -> Generator[list[dict[str, Any]]]:
+    ) -> Generator[list[dict[str, Any]], None, None]:
 
         col = self.db[collection_name]
         last_id = None
