@@ -52,16 +52,16 @@ services:
       timeout: 5s
       retries: 10
 
-  weaviate-console:
-    image: semitechnologies/weaviate-console:latest
-    container_name: weaviate_console
-    ports:
-      - "3000:80"
-    environment:
-      - WEAVIATE_URL=http://localhost:8080
-    depends_on:
-      weaviate:
-        condition: service_healthy
+  # weaviate-console:
+  #   image: semitechnologies/weaviate-console:latest
+  #   container_name: weaviate_console
+  #   ports:
+  #     - "3000:80"
+  #   environment:
+  #     - WEAVIATE_URL=http://localhost:8080
+  #   depends_on:
+  #     weaviate:
+  #       condition: service_healthy
 
 
   fastapi-backend:
@@ -132,7 +132,6 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_DISABLE_LOGIN_FORM=true
-      # Wskazujemy Grafanie nowy katalog na provisioning
       - GF_PATHS_PROVISIONING=/tmp/provisioning
     entrypoint:
       - sh

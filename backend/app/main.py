@@ -42,7 +42,7 @@ def create_instructor_client():
     raw = OpenAI(
         base_url=ollama_base_url,
         api_key="ollama",
-        timeout=30.0,
+        timeout=120.0,
     )
     instructor_client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
     return raw, instructor_client

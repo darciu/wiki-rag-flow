@@ -15,7 +15,7 @@ keybert==0.9.0
 stanza==1.11.0
 spacy==3.8.11
 Requests==2.32.5
-llama-index-core==0.14.18
+llama-index-core==0.14.19
 llama-index-vector-stores-weaviate==1.6.0
 langchain-ollama==1.0.1
 langgraph==1.0.8

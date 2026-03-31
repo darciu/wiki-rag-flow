@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY scrapers/ /app/scrapers/
 COPY backend/ /app/backend/
 COPY logger_config.py /app/logger_config.py
+COPY config.py /app/config.py
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1

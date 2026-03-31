@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import bz2
 import hashlib
+import json
 import logging
 import re
 import xml.etree.ElementTree as ET
@@ -67,7 +68,7 @@ def fetch_dumpstatus(dumpstatus_url) -> dict[str, Any]:
     except requests.exceptions.HTTPError as e:
         logger.error(f"HTTP error has occured. Status {response.status_code}: {e}")
         raise
-    except requests.exceptions.JSONDecodeError as e:
+    except json.JSONDecodeError as e:
         logger.error(f"JSON format error {e}")
         raise
     except Exception as e:

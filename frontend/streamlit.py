@@ -79,7 +79,7 @@ if "http" not in st.session_state:
 @st.cache_data(ttl=20)
 def fetch_available_models():
     try:
-        r = requests.get(API_MODELS_URL, timeout=5)
+        r = requests.get(API_MODELS_URL, timeout=15)
         r.raise_for_status()
         models = r.json().get("models", ["llama3.2"])
         logger.info(f"Avaialbe ollama models: {models}")
