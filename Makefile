@@ -117,12 +117,12 @@ parser-packages:
 	pip install -r requirements/parser.txt
 
 project-up: emb-run-bg ollama-up
-	docker-compose up --build -d
+	docker compose up --build -d
 	sleep 5
 	$(MAKE) emb-health
 	$(MAKE) ollama-health
 
 project-down: emb-stop ollama-stop
-	docker-compose down
+	docker compose down
 
 

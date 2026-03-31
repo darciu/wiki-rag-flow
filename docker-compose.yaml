@@ -52,16 +52,16 @@ services:
       timeout: 5s
       retries: 10
 
-  weaviate-console:
-    image: semitechnologies/weaviate-console:latest
-    container_name: weaviate_console
-    ports:
-      - "3000:80"
-    environment:
-      - WEAVIATE_URL=http://localhost:8080
-    depends_on:
-      weaviate:
-        condition: service_healthy
+  # weaviate-console:
+  #   image: semitechnologies/weaviate-console:latest
+  #   container_name: weaviate_console
+  #   ports:
+  #     - "3000:80"
+  #   environment:
+  #     - WEAVIATE_URL=http://localhost:8080
+  #   depends_on:
+  #     weaviate:
+  #       condition: service_healthy
 
 
   fastapi-backend:
