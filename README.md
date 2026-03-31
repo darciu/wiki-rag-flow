@@ -56,3 +56,7 @@ You can open all ports using the following command:
 ```bash
 make open-hosts
 ```
+
+
+## Graph
+![alt text](graph.png)

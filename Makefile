@@ -35,6 +35,14 @@ GRAFANA_URL := http://localhost:3001
 
 .PHONY: emb-venv emb-run-bg emb-stop emb-health ollama-up ollama-stop ollama-pull-llama ollama-pull-qwen project-up project-down open-hosts
 
+IS_WSL := $(shell grep -i Microsoft /proc/version)
+
+ifdef IS_WSL
+    OPEN := powershell.exe -Command Start-Process
+else
+    OPEN := xdg-open
+endif
+
 open-hosts:
 	@echo "Opening hosts in your browser..."
 	@$(OPEN) $(FRONTEND_URL)
